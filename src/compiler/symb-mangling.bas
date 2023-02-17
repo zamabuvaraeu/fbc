@@ -838,25 +838,26 @@ private sub hMangleVariable( byval sym as FBSYMBOL ptr )
 						'' BASIC mangling, use the upper-cased name
 						id = *sym->id.name
 
-						'' Using '$' to prevent collision with C keywords etc.
-						'' ('$' isn't allowed as part of FB ids)
-						id += "$"
-
 						'' Type suffix?
 						if( symbIsSuffixed( sym ) ) then
+							'' Using '$' to prevent collision with C keywords etc.
+							'' ('$' isn't allowed as part of FB ids)
+							id += "$"
+
 							'' Encode the type to prevent collisions with other variables
 							'' using the same base id but different type suffix.
 							id += *hMangleBuiltInType( symbGetType( sym ) )
 							id += "$"
+							
+							'' Append the scope level to prevent collisions with symbols
+							'' from parent scopes or from the toplevel namespace.
+							'' Note: locals from the main scope will start at level 0,
+							'' while locals from procedures start at level 1,
+							'' but that's ok as long as globals aren't suffixed with
+							'' a level at all.
+							id += str( sym->scope )
 						end if
 
-						'' Append the scope level to prevent collisions with symbols
-						'' from parent scopes or from the toplevel namespace.
-						'' Note: locals from the main scope will start at level 0,
-						'' while locals from procedures start at level 1,
-						'' but that's ok as long as globals aren't suffixed with
-						'' a level at all.
-						id += str( sym->scope )
 					else
 						'' Use the case-sensitive name saved in the alias
 						id = *sym->id.alias

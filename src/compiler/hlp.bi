@@ -34,6 +34,12 @@ declare sub hUcase _
 		byval dst as zstring ptr _
 	)
 
+declare sub hUcaseAllways _
+	( _
+		byval src as const zstring ptr, _
+		byval dst as zstring ptr _
+	)
+
 declare function hStripUnderscore _
 	( _
 		byval symbol as zstring ptr _

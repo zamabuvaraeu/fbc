@@ -314,7 +314,7 @@ private function hAddIncFile _
 
 	fname = xallocate( len( *filename ) + 1 )
 #if defined( __FB_WIN32__ ) or defined( __FB_DOS__ )
-	hUcase( filename, fname )
+	hUcaseAllways( filename, fname )
 #else
 	*fname = *filename
 #endif
