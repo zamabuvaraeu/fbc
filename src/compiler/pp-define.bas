@@ -1411,6 +1411,12 @@ sub ppDefine( byval ismultiline as integer )
 	if( sym <> NULL ) then
 		errReportEx( FB_ERRMSG_DUPDEFINITION, defname )
 	else
+		Dim pppNode As FB_DEFPARAM ptr = paramhead
+		Do While pppNode
+			hUcaseAllways(pppNode->name, pppNode->name)
+			pppNode = pppNode->next
+		Loop
+		
 		tokhead = hReadMacroText( params, paramhead, ismultiline )
 		symbAddDefineMacro( @defname, tokhead, params, paramhead, define_flags )
 	end if
