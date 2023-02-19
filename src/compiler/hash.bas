@@ -127,10 +127,10 @@ function hashLookupEx _
 
 	function = NULL
 
-	index mod= hash->nodes
+	Dim indexMod As uinteger = index mod hash->nodes
 
 	'' get the start of list
-	list = @hash->list[index]
+	list = @hash->list[indexMod]
 	item = list->head
 	if( item = NULL ) then
 		exit function
