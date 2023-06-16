@@ -730,6 +730,10 @@ Function NeedUCase( _
 			Return True
 		End If
 		
+		If srcU = "INTERFACE" Then
+			Return True
+		End If
+		
 		If srcU = "EXTENDS" Then
 			Return True
 		End If
@@ -747,6 +751,14 @@ Function NeedUCase( _
 		End If
 		
 		If srcU = "ABSTRACT" Then
+			Return True
+		End If
+		
+		If srcU = "OBJECT" Then
+			Return True
+		End If
+		
+		If srcU = "OFFSETOF" Then
 			Return True
 		End If
 		
