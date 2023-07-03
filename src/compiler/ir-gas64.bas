@@ -631,12 +631,16 @@ private sub check_optim(byref code as string)
 					writepos=len(ctx.proc_txt)+len(code)+9
 					code="#O7"+code+newline+string( ctx.indent*3, 32 )+newcode+" #Optim 7"
 				else
-					prevpart1="":prevpart2="":previnstruc=""
-
+					prevpart1=part1
+					prevpart2=part2
+					previnstruc=instruc
+					prevwpos=writepos
+					flag=KUSE_MOV
+					exit sub
 				end if
 			end if
 		end if
-		part1="":part2=""
+		prevpart1="":prevpart2=""
 		flag=KUSE_MOV
 		exit sub
 	end if
@@ -1041,12 +1045,11 @@ private sub edbgemitglobalvar_asm64 _
 	)
 	dim as integer t = any, attrib = any
 	dim as string desc
-
-	'' Ignore static locals here (they are handled like other locals during
-	'' edbgEmitProcFooter() -> hDeclLocalVars())
-	if( symbIsLocal( sym ) ) then
-		exit sub
-	end if
+	'' Ignore static locals here but should not happen so useless test
+	'if( symbIsLocal( sym ) ) then
+		'asm_info("STATICS USED ?")
+		'exit sub
+	'end if
 
 	'' depends on section
 	select case section
@@ -2116,7 +2119,14 @@ private sub hemitvariable( byval sym as FBSYMBOL ptr )
 				exit sub
 			end if
 		else
-			if( env.clopt.debuginfo = true ) then edbgemitglobalvar_asm64(sym,IR_SECTION_BSS)
+			if( env.clopt.debuginfo = true ) then
+				'' only static attribute (no shared, etc)
+				if is_global = FB_SYMBATTRIB_STATIC then
+					edbgemitlocalvar_asm64( sym, symbIsStatic( sym ) )
+				else
+					edbgemitglobalvar_asm64(sym,IR_SECTION_BSS)
+				end if
+			End If
 		end if
 
 	else
@@ -2301,7 +2311,7 @@ private sub hAddGlobalCtorDtor( byval proc as FBSYMBOL ptr )
 			ctx.ctorcount += 1
 			'hEmitCtorDtorArrayElement( proc, ctx.ctors )
 			asm_info("Constructor name/prio="+*symbGetMangledName( proc )+" / "+str( symbGetProcPriority( proc ) ))
-			if ctx.systemv andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
+			if ctx.systemv=true andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
 				asm_section(".init_array")
 			else
 				asm_section(".ctors")
@@ -2314,7 +2324,7 @@ private sub hAddGlobalCtorDtor( byval proc as FBSYMBOL ptr )
 		ctx.dtorcount += 1
 		'hEmitCtorDtorArrayElement( proc, ctx.dtors )
 		asm_info("Destructor name/prio="+*symbGetMangledName( proc )+" / "+str( symbGetProcPriority( proc ) ))
-		if ctx.systemv andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
+		if ctx.systemv=true andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
 			asm_section(".fini_array")
 		else
 			asm_section(".dtors")
@@ -2366,7 +2376,7 @@ private sub _emitend( )
 		end if
 
 		''must be executed before the constructors and main
-		if ctx.systemv andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
+		if ctx.systemv=true andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
 			asm_section(".init_array")
 		else
 			asm_section(".ctors")
@@ -2961,8 +2971,7 @@ private sub _procAllocStaticVars( byval sym as FBSYMBOL ptr )
 	while( sym )
 		select case( symbGetClass( sym ) )
 		'' scope block? recursion..
-			case FB_SYMBCLASS_SCOPE
-			 'asm_info("SCOPE var1="+*symbGetMangledName(sym))
+		case FB_SYMBCLASS_SCOPE
 			_procallocstaticvars( symbGetScopeSymbTbHead( sym ) )
 		case FB_SYMBCLASS_VAR
 			''  variable static
@@ -3142,7 +3151,8 @@ private sub bop_float( _
 	byref op3 as string, _
 	byref op4 as string, _
 	byref prefix as string, _
-	byval label as FBSYMBOL ptr  _
+	byval label as FBSYMBOL ptr, _
+	byval options as IR_EMITOPT _
 	)
 
 	dim as string lname1,lname2,movreg,movmem,compreg,immreg,addreg,subreg,mulreg,divreg
@@ -3182,49 +3192,153 @@ private sub bop_float( _
 
 	select case op
 		case AST_OP_EQ,AST_OP_NE,AST_OP_LT,AST_OP_LE,AST_OP_GT,AST_OP_GE
+
 			if label=0 then
 				lname1 = *symbUniqueLabel( )
-				asm_code("mov "+*regstrq(vrreg)+", -1")
 			end if
 
-			asm_code(compreg+"xmm0, xmm1")
+			dim as integer swapregs = false
+			dim as integer swapinit = false
+			dim as string parity = ""
 
-			if op=AST_OP_EQ then
-				lname2 = *symbUniqueLabel( )
-				asm_code("jp "+lname2) ''different true very big (or very small value)
-			elseif op=AST_OP_NE then
-				if label=0 then
-					asm_code("jp "+lname1)
+			if( label = 0 ) then
+				if( (options and IR_EMITOPT_REL_DOINVERSE) = 0 ) then
+					'' Result = ( a op b )
+					select case op
+						case AST_OP_EQ
+							lname2 = *symbUniqueLabel( )
+							parity = "jp "+lname2
+							jmpcode=@"je "
+						case AST_OP_NE
+							parity = "jp "+lname1
+							jmpcode=@"jne "
+						case AST_OP_GT
+							jmpcode=@"ja "
+						case AST_OP_LT
+							swapregs = true
+							jmpcode=@"ja "
+						case AST_OP_GE
+							jmpcode=@"jae "
+						case AST_OP_LE
+							swapregs = true
+							jmpcode=@"jae "
+					end select
 				else
-					asm_code("jp "+*symbGetMangledName( label ))''different true
+					'' Result = !( a op b )
+					select case op
+						case AST_OP_EQ
+							parity = "jp "+lname1
+							jmpcode=@"jne "
+						case AST_OP_NE
+							lname2 = *symbUniqueLabel( )
+							parity = "jp "+lname2
+							jmpcode=@"je "
+						case AST_OP_GT
+							swapinit = true
+							jmpcode=@"ja "
+						case AST_OP_LT
+							swapregs = true
+							swapinit = true
+							jmpcode=@"ja "
+						case AST_OP_GE
+							swapinit = true
+							jmpcode=@"jae "
+						case AST_OP_LE
+							swapregs = true
+							swapinit = true
+							jmpcode=@"jae "
+					end select
+				end if
+			else
+				if( (options and IR_EMITOPT_REL_DOINVERSE) <> 0 ) then
+					'' if !( a op b ) then goto exit_label
+					select case op
+						case AST_OP_EQ
+							parity = "jp "+*symbGetMangledName( label )
+							jmpcode=@"jne "
+						case AST_OP_NE
+							lname2 = *symbUniqueLabel( )
+							parity = "jp "+lname2
+							jmpcode=@"je "
+						case AST_OP_GT
+							jmpcode=@"jbe "
+						case AST_OP_LT
+							swapregs = true
+							jmpcode=@"jbe "
+						case AST_OP_GE
+							jmpcode=@"jb "
+						case AST_OP_LE
+							swapregs = true
+							jmpcode=@"jb "
+					end select
+				else
+					'' if ( a op b ) then goto exit_label
+					select case op
+						case AST_OP_EQ
+							lname2 = *symbUniqueLabel( )
+							parity = "jp "+lname2
+							jmpcode=@"je "
+						case AST_OP_NE
+							parity = "jp "+*symbGetMangledName( label )
+							jmpcode=@"jne "
+						case AST_OP_GT
+							jmpcode=@"ja "
+						case AST_OP_LT
+							swapregs = true
+							jmpcode=@"ja "
+						case AST_OP_GE
+							jmpcode=@"jae "
+						case AST_OP_LE
+							swapregs = true
+							jmpcode=@"jae "
+					end select
 				end if
 			end if
 
-			select case op
-				case AST_OP_EQ
-					jmpcode=@"je " ''different not true
-				case AST_OP_NE
-					jmpcode=@"jne " ''different true
-				case AST_OP_LT ''todo optimise xmm1 if memory do directly
-					jmpcode=@"jb "''above true
-				case AST_OP_LE
-					jmpcode=@"jbe " ''above or equal true
-				case AST_OP_GT
-					jmpcode=@"ja "''below true
-				case AST_OP_GE
-					jmpcode=@"jae "''below or equal true
-			end select
+			'' Initialize default return value
+			if( label = 0 ) then
+				if( swapinit ) then
+					asm_code("mov "+*regstrq(vrreg)+", 0")
+				else
+					asm_code("mov "+*regstrq(vrreg)+", -1")
+				end if
+			end if
 
+			'' Do comparison
+			if( swapregs ) then
+				asm_code(compreg+"xmm1, xmm0")
+			else
+				asm_code(compreg+"xmm0, xmm1")
+			end if
+
+			'' Check for parity flag (if needed),
+			'' disregard if '-fpmode fast' command line option is used
+			if( env.clopt.fpmode = FB_FPMODE_PRECISE ) then
+				if( len( parity ) > 0 ) then
+					asm_code( parity )
+				end if
+			end if
+
+			'' conditionally jump to exit label
 			if label=0 then
 				asm_code(*jmpcode+lname1)
 			else
 				asm_code(*jmpcode+*symbGetMangledName( label ))
 				reg_mark(label)
 			end if
-			if op=AST_OP_EQ then asm_code(lname2+":") ''label when different
 
-			if label=0 then
-				asm_code("xor "+*regstrq(vrreg)+", "+*regstrq(vrreg))
+			'' label when different
+			if( len(lname2) > 0 ) then
+				asm_code(lname2+":")
+			end if
+
+			'' set the result if different
+			if( label = 0 ) then
+				if( swapinit ) then
+					asm_code("mov "+*regstrq(vrreg)+", -1")
+				else
+					asm_code("xor "+*regstrq(vrreg)+", "+*regstrq(vrreg))
+				end if
 				restore_vrreg(vr,vrreg)
 				asm_code(lname1+":")
 			end if
@@ -3262,7 +3376,7 @@ private sub bop_float( _
 	end select
 
 end sub
-private sub hloadoperandsandwritebop(byval op as integer,byval v1 as IRVREG ptr,byval v2 as IRVREG ptr,byval vr as IRVREG ptr,byval label as FBSYMBOL ptr =0)
+private sub hloadoperandsandwritebop(byval op as integer,byval v1 as IRVREG ptr,byval v2 as IRVREG ptr,byval vr as IRVREG ptr,byval label as FBSYMBOL ptr =0,byval options as IR_EMITOPT)
 
 	dim as string op1,op2,op3,op4,prefix1,prefix2,suffix,op1prev,regtempo,op1bis
 	dim as FB_DATATYPE tempodtype,tempo2dtype
@@ -3327,7 +3441,7 @@ private sub hloadoperandsandwritebop(byval op as integer,byval v1 as IRVREG ptr,
 			prefix1=""
 		case IR_VREGTYPE_VAR ''format varname ofs1   local/static  ofs1 could be zero
 
-			if ctx.systemv andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB andalso (symbIsCommon(v1->sym)) then ''linux dll common shared
+			if ctx.systemv=true andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB andalso (symbIsCommon(v1->sym)) then ''linux dll common shared
 				tempo=reg_findfree(999994)
 				regtempo=*regstrq(tempo)
 				op3="mov "+regtempo+", "+*symbGetMangledName(v1->sym)+"@GOTPCREL[rip]"
@@ -3386,7 +3500,7 @@ private sub hloadoperandsandwritebop(byval op as integer,byval v1 as IRVREG ptr,
 
 		case IR_VREGTYPE_VAR ''format varname ofs1   local/static  ofs1 could be zero
 
-			if ctx.systemv andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB andalso (symbIsCommon(v1->sym)) then
+			if ctx.systemv=true andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB andalso (symbIsCommon(v1->sym)) then
 
 				tempo=reg_findfree(999993)
 				regtempo=*regstrq(tempo)
@@ -3413,7 +3527,7 @@ private sub hloadoperandsandwritebop(byval op as integer,byval v1 as IRVREG ptr,
 
 	If( typeGetClass( v1->dtype ) = FB_DATACLASS_FPOINT) Or ( typeGetClass( v2->dtype ) = FB_DATACLASS_FPOINT) then
 		asm_info("Bop with float")
-		bop_float(op,v1,v2,vr,op1,op2,op3,op4,prefix1,label)
+		bop_float(op,v1,v2,vr,op1,op2,op3,op4,prefix1,label,options)
 		exit sub
 	end if
 
@@ -3815,7 +3929,15 @@ private sub hloadoperandsandwritebop(byval op as integer,byval v1 as IRVREG ptr,
 	end select
 
 end sub
-private sub _emitbop(byval op as integer,byval v1 as IRVREG ptr,byval v2 as IRVREG ptr,byval vr as IRVREG ptr,byval label as FBSYMBOL ptr)
+private sub _emitbop _
+	( _
+		byval op as integer, _
+		byval v1 as IRVREG ptr, _
+		byval v2 as IRVREG ptr, _
+		byval vr as IRVREG ptr, _
+		byval label as FBSYMBOL ptr, _
+		byval options as IR_EMITOPT _
+	)
 	dim as FB_DATATYPE dtype
 	#ifdef __GAS64_DEBUG__
 		var bopdump = vregPretty( v1 ) + " " + astdumpopToStr( op ) + " " + vregPretty( v2 )
@@ -3850,7 +3972,7 @@ private sub _emitbop(byval op as integer,byval v1 as IRVREG ptr,byval v2 as IRVR
 			_setvregdatatype(v1,dtype,0)
 		end if
 	end if
-	hLoadOperandsAndWriteBop( op, v1, v2, vr,label )
+	hLoadOperandsAndWriteBop( op, v1, v2, vr,label, options )
 
 end sub
 private sub _emituop(byval op as integer,byval v1 as IRVREG ptr,byval vr as IRVREG Ptr)
@@ -4338,7 +4460,7 @@ private sub _emitconvert( byval v1 as IRVREG ptr, byval v2 as IRVREG ptr )
 
 		case IR_VREGTYPE_VAR ''format varname ofs1   local/static  ofs1 could be zero
 			if symbIsStatic(v2->sym) Or symbisshared(v2->sym) then
-				if ctx.systemv andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
+				if ctx.systemv=true andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
 					op2=*symbGetMangledName(v2->sym)+"@GOTPCREL[rip]" '[rip+"+Str(v2->ofs)+"]"
 				else
 					op2=*symbGetMangledName(v2->sym)+"[rip+"+Str(v2->ofs)+"]"
@@ -4352,7 +4474,7 @@ private sub _emitconvert( byval v1 as IRVREG ptr, byval v2 as IRVREG ptr )
 
 		case IR_VREGTYPE_OFS ''format varname ofs1   static  ofs1 could be zero
 			op2=*symbGetMangledName(v2->sym)+"[rip+"+str(v2->ofs)+"]"
-			if typeGetDtOnly( v2->dtype )=FB_DATATYPE_FUNCTION andalso ctx.systemv andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
+			if typeGetDtOnly( v2->dtype )=FB_DATATYPE_FUNCTION andalso ctx.systemv=true andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
 				asm_code("mov rax, QWORD PTR "+left(op2,instr(op2,"[")-1)+"@GOTPCREL[rip]")
 				asm_code("mov "+op1+", rax",KNOOPTIM)
 			else
@@ -5000,7 +5122,7 @@ private sub _emitstore( byval v1 as IRVREG ptr, byval v2 as IRVREG ptr )
 
 	if v1->typ=IR_VREGTYPE_VAR And v2->typ=IR_VREGTYPE_VAR then
 
-		if ctx.systemv andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
+		if ctx.systemv=true andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
 			if symbIsCommon(v1->sym) then
 
 				tempo=reg_findfree(999998)
@@ -5067,7 +5189,7 @@ private sub _emitstore( byval v1 as IRVREG ptr, byval v2 as IRVREG ptr )
 					asm_code("movNOTUSED? "+prefix+op1+", "+op2)
 				case IR_VREGTYPE_VAR,IR_VREGTYPE_IDX,IR_VREGTYPE_PTR
 
-					if ctx.systemv andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
+					if ctx.systemv=true andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
 						if v1->sym<>0 andalso (symbIsCommon(v1->sym)) then
 							tempo=reg_findfree(999998)
 							regtempo=*regstrq(tempo)
@@ -5102,13 +5224,13 @@ private sub _emitstore( byval v1 as IRVREG ptr, byval v2 as IRVREG ptr )
 		elseif v2->typ=IR_VREGTYPE_OFS then
 			'asm_info("datatype="+str(typeGetDtOnly( v2->dtype ))+" "+str(FB_DATATYPE_FUNCTION))
 			'asm_info("DLL="+str(fbGetOption( FB_COMPOPT_OUTTYPE ))+" "+str(FB_OUTTYPE_DYNAMICLIB))
-			if typeGetDtOnly( v2->dtype )=FB_DATATYPE_FUNCTION andalso ctx.systemv andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
+			if typeGetDtOnly( v2->dtype )=FB_DATATYPE_FUNCTION andalso ctx.systemv=true andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
 				asm_code("mov rax, QWORD PTR "+left(op2,instr(op2,"[")-1)+"@GOTPCREL[rip]")
 			else
 				asm_code("lea rax, "+op2)
 			end if
 
-			if ctx.systemv andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
+			if ctx.systemv=true andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
 				if v1->sym<>0 andalso (symbIsCommon(v1->sym)) then
 					tempo=reg_findfree(999998)
 					regtempo=*regstrq(tempo)
@@ -5121,7 +5243,7 @@ private sub _emitstore( byval v1 as IRVREG ptr, byval v2 as IRVREG ptr )
 			asm_code("mov "+op1+", rax")
 		else
 
-			if ctx.systemv andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
+			if ctx.systemv=true andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
 				if v1->sym<>0 andalso (symbIsCommon(v1->sym)) then
 					'tempo=reg_findfree(999998)
 					'regtempo=*regstrq(tempo)
@@ -5319,7 +5441,7 @@ private sub _emitaddr(byval op as integer,byval v1 as IRVREG ptr,byval vr as IRV
 
 				case IR_VREGTYPE_VAR ''format varname ofs1   local/static  ofs1 could be zero
 					if symbIsStatic(v1->sym) Or symbisshared(v1->sym) then
-						if (symbIsCommon(v1->sym)) andalso ctx.systemv andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
+						if (symbIsCommon(v1->sym)) andalso ctx.systemv=true andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
 							asm_code("mov rax, "+*symbGetMangledName(v1->sym)+"@GOTPCREL[rip]")
 							op1="[rax]"
 						else
@@ -5362,7 +5484,7 @@ sub save_call(byref func as string,byval vr as IRVREG ptr,byval vrreg as integer
 		ctx.argcptmax=1
 	end if
 
-	if ctx.systemv andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
+	if ctx.systemv=true andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
 		asm_code("call "+func+"@PLT")
 	else
 		asm_code("call "+func)
@@ -5710,7 +5832,7 @@ private sub hdocall(byval proc as FBSYMBOL ptr,byref pname as string,byref first
 							end if
 						else
 							if v2->typ=IR_VREGTYPE_OFS or (dtype=FB_DATATYPE_STRUCT) then
-								if typeGetDtOnly( v2->dtype )=FB_DATATYPE_FUNCTION andalso ctx.systemv andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
+								if typeGetDtOnly( v2->dtype )=FB_DATATYPE_FUNCTION andalso ctx.systemv=true andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
 									asm_code("mov rax, QWORD PTR "+left(op1,instr(op1,"[")-1)+"@GOTPCREL[rip]")
 								else
 									asm_code("lea rax, "+op1)
@@ -5852,7 +5974,7 @@ private sub hdocall(byval proc as FBSYMBOL ptr,byref pname as string,byref first
 			else
 				if v2->typ=IR_VREGTYPE_OFS then
 					reg_transfer(listreg(cptint),reg2)''is the reg free ?
-					if typeGetDtOnly( v2->dtype )=FB_DATATYPE_FUNCTION andalso ctx.systemv andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
+					if typeGetDtOnly( v2->dtype )=FB_DATATYPE_FUNCTION andalso ctx.systemv=true andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
 						asm_code("mov "+*regstrq(listreg(cptint))+", QWORD PTR "+left(op1,instr(op1,"[")-1)+"@GOTPCREL[rip]")
 					else
 						asm_code("lea "+*regstrq(listreg(cptint))+", "+op1)
@@ -5890,7 +6012,7 @@ private sub hdocall(byval proc as FBSYMBOL ptr,byref pname as string,byref first
 							end if
 						end if
 
-						if ctx.systemv andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
+						if ctx.systemv=true andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
 							if v2->sym<>0 andalso (symbIsCommon(v2->sym)) then
 								asm_code("mov rax, "+*symbGetMangledName(v2->sym)+"@GOTPCREL[rip]")
 								op1="[rax]"
@@ -5958,7 +6080,7 @@ private sub hdocall(byval proc as FBSYMBOL ptr,byref pname as string,byref first
 		end if
 	end if
 
-	if ctx.systemv andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
+	if ctx.systemv=true andalso fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB then
 		asm_code("call " +pname+"@PLT",KNOALL)
 	else
 		asm_code("call " +pname,KNOALL)
@@ -6458,8 +6580,7 @@ private sub _emitasmline( byval asmtokenhead as ASTASMTOK ptr )
 
 				Var ofs = symbGetOfs( n->sym )
 				if( ofs <> 0 ) then
-					asmline=left(asmline,len(asmline)-1) ''to remove the first bracket
-					asmline+= str( ofs )+"[rbp" ''the final bracket is added just after
+					asmline+= str( ofs )+"[rbp]"
 				else
 					asmline+= *symbGetMangledName( n->sym )'*symbGetMangledName( n->sym )
 				end if
@@ -6496,7 +6617,16 @@ private sub _emitvarinibegin( byval sym as FBSYMBOL ptr )
 	asm_code(*symbGetMangledName( sym )+":")
 	if( symbIsExtern( sym ) or symbIsDynamic( sym ) ) then
 	else
-		if( env.clopt.debuginfo = true ) then edbgemitglobalvar_asm64(sym,IR_SECTION_DATA)
+		if( env.clopt.debuginfo = true ) then
+			if ( symbGetAttrib( sym ) and _
+		(FB_SYMBATTRIB_COMMON or FB_SYMBATTRIB_PUBLIC or _
+		FB_SYMBATTRIB_EXTERN or FB_SYMBATTRIB_SHARED)  ) then
+				edbgemitglobalvar_asm64(sym,IR_SECTION_DATA)
+			else
+				''static attrib only
+				edbgemitlocalvar_asm64( sym, symbIsStatic( sym ) )
+			end if
+		end if
 	end if
 end sub
 private sub _emitvarinii( byval sym as FBSYMBOL ptr, byval value as longint )
@@ -6995,7 +7125,7 @@ private sub _emitMacro( byval op as integer,byval v1 as IRVREG ptr, byval v2 as 
 						reghandle(savereg)=v1->reg
 					end if
 					tempo1=irhlAllocVrImm(FB_DATATYPE_INTEGER,0,8)
-					_emitbop(AST_OP_ADD,v1,tempo1,0,0)''add 8 for next arg
+					_emitbop(AST_OP_ADD,v1,tempo1,0,0,IR_EMITOPT_NONE)''add 8 for next arg
 				else
 					vr->reg=v1->reg
 				end if
