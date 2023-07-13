@@ -2,7 +2,7 @@
 #define __FB_BI__
 
 const FB_VER_MAJOR  = "1"
-const FB_VER_MINOR  = "10"
+const FB_VER_MINOR  = "20"
 const FB_VER_PATCH  = "0"
 const FB_VERSION    = FB_VER_MAJOR + "." + FB_VER_MINOR + "." + FB_VER_PATCH
 const FB_BUILD_DATE = __DATE__
@@ -615,6 +615,15 @@ declare function fbGetBackendValistType () as FB_CVA_LIST_TYPEDEF
 #else
 	#define INT_BOOL_TO_STR(y_) str(y_)
 	#define INT_BOOL_TO_WSTR(y_) wstr(y_)
+#endif
+
+
+'' helper macro to assert at compile time that the current
+'' procedure matches a specific function pointer callback
+#if __FB_VERSION__ >= "1.09.0"
+#define ASSERT_PROC_DECL( cb_type ) #assert( typeof( procptr(__FUNCTION_NQ__) ) = typeof( cb_type ) )
+#else
+#define ASSERT_PROC_DECL( cb_type )
 #endif
 
 #endif '' __FB_BI__

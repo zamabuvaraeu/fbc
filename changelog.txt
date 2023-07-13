@@ -1,10 +1,38 @@
+Version 1.20.0
+
+[changed]
+- internal: changes to all backends gcc/llvm/gas64/gas/gas+SSE for floating point comparison handling
+- allow '-fpmode fast' command line option for any target (previously was SSE only) - this can be used augment floating point handling where some accuracy is sacrificed for smaller and faster code generation
+- CBOOL(float-expression) returns false if and only if float-expression is zero (0), otherwise returns true (including NaN's)
+- if (float-expression) then .. equivalent to if cbool(float-expression) ... 
+
+[added]
+
+[fixed]
+- github #410: give consistent floating point comparisons results involving NaNs.
+- consistent handling for float comparisons involving NaN's.  gcc/gas64/gas/gas+SSE (LLVM not-tested) - this includes IF expr then, IIF(), CBOOL, result = (a rel-op b), etc.
+
+
+Version 1.10.1
+
+[changed]
+
+[added]
+
+[fixed]
+- sf.net #982: Array descriptors emitted incorrectly in gcc backend
+- gas64: emit debug information for statics
+- gas64: handle #inf's and NaN's in float comparisons 
+- unable to set opengl scaling to 1 after initial screen mode - previously: logic error in the driver code prevented the scaling from being set to 1
+
+
 Version 1.10.0
 
 [changed]
 - gcc: '-funwind-tables' enabled on 64-bit targets for stack unwinding (adeyblue)
 - fbc: '--eh-frame-hdr' for linking on 64-bit nix targets for stack unwinding (adeyblue)
 - x86: arch 686 by default instead of 486 (SARG)
-- x86: arch 586 by default instead of 586 on DOS
+- x86: arch 586 by default instead of 486 on DOS
 - asm backend: only with 686 arch, use of fcomi(p) to avoid slower instructions and also less code (SARG)
 - fbc: #DUMP <expr> and #ODUMP <expr> pragmas only available in debug version of fbc
 - inc/fbmath.bi renamed to inc/fbprng.bi
@@ -32,6 +60,7 @@ Version 1.10.0
 - fbc: only up-cast initializers when needed.  New behaviour is to try matching initializers without up-casting before matching with up-casting.
 - fbc: don't join operators separated by white space.  Previously, '<' + '=', '<' + '>', '=' + '>', and '-' + '>' were joined together even if separated by whitespace.
 - fbc: don't skip whitespace between decimal point and digit. Previously, '.' + '0..9' floating point literals were allowed to be separated by whitespace.
+- gfxlib2: gfx_dos drivers initialize the internal dirty array based on scanline size
 
 [added]
 - gas/gas64: '.cif_sections' and '.cif_' directives for stack unwinding (adeyblue)
@@ -52,18 +81,22 @@ Version 1.10.0
 - gfxlib2: add FB.GET_SCANLINE_SIZE to fbgfx.bi and ScreenControl() to get current internal scan line size multiplier
 - gfxlib2: SCREENCONTROL: add getters for GL parameters - new GET_GL_* constants in fbgfx.bi
 - fbc: allow a TYPE or UNION to be declared inside another TYPE or UNION to allow declaration of nested named types.  Support c++ name mangling parameters of named nested types.  Support definition of variables declared in a named nested type.
-- Name mangling for c++ 'char' through BYTE/UBYTE parameters using the form "[unsigned] byte alias "char".  Data type size is still 8 byte signed/unsigned from fbc side, but will mangled as 'char'; neither signed nor unsigned for the c++ side.
+- Name mangling for c++ 'char' through BYTE/UBYTE parameters using the form "[unsigned] byte alias "char".  Data type size is still 8 byte signed/unsigned from fbc side, but will be mangled as 'char'; neither signed nor unsigned for the c++ side.
 - Support 'SOURCE_DATE_EPOCH' environment variable for controlling the instrinsic __DATE__, __DATE_ISO__, __TIME__ macros.  This in turn controls __FB_BUILD_DATE__ and __FB_BUILD_DATE_ISO__ macros when building the compiler.  Report error message on malformed values.
 - fbc -nolib a,b,c command line option for selectively excluding specific libraries when linking (more fine-grained control than -nodeflibs, and not only for default libraries)
 - fbc will restart the parser when #cmdline "-mt" is used or usage of any threaded functions automatically enable -mt.  This allows the compiler to parse the current module from the beginning and process any __FB_MT__ checks.
 - fbc: __fastcall support for gcc/gas 32-bit x86 - fbc passes first and second integer arguments in ECX and EDX registers respectively, caller cleans up stack.
-- fbc: __FB_QUERY_SYMBOL__( what, sym ) built-in macro for querying fbc symbol internals.  Added fbc-int/symbol.bi (Work in progress).
+- fbc: __FB_QUERY_SYMBOL__( what, sym ) built-in macro for querying fbc symbol internals.  Added fbc-int/symbol.bi.
 - add '-z retinflts' command line option for code generation.  This option enables returning some structures (types) in floating point registers.  This is a work-around for different handling of structs returned by value on different tool chains / targets.
 - fbgfx.bi: add private function fb.__pixels() to return a pointer to the image data (paul doe)
 - fbc: add command line option and warning '-w upcast' to warn when up-casting would discard initializers
 - fbc headers: add ./inc/fblimits.bi for minimum and maximum value constants - for example fb.MIN_VALUE_INTEGER and fb.MAX_VALUE_INTEGER
 - In normal build of fbc, try to automatically use gcc to query the search path for a std c++ library.  This helps with dependency for tests/cpp and for some users that want to interop with c++
-- Add  makefile option DISABLE_STDCXX_PATH to disable usnig gcc to search for some c++ library path
+- Add  makefile option DISABLE_STDCXX_PATH to disable using gcc to search for some c++ library path
+- fbc: allow typename.member symbol checks for #ifdef / #ifndef / defined() where member can be a data field, static data field, nested type, constructor, destructor, property, operator (self-assignment, new, new[], delete, delete[], let, cast, for, step, next), or member procedure.
+- rtlib: dos: add "__fb_dos_no_dpmi_yield" variable to control calling "__dpmi_yield()" and prevent a crash under some dos extenders in dosbox
+- fbc: PROCPTR( UDT.member [, ANY|SUB|FUNCTION ...] ) to get a procedure pointer for type member procedures.  If the member is abstract, then return 0 (null function pointer of the member procedure's call signature)
+- fbc: PROCPTR( UDT.member [, VIRTUAL ANY|SUB|FUNCTION ...] ) to get the zero based index in the virtual table.  If there is no virtual table entry (or no virtual table at all) then return the special value of -1
 
 [fixed]
 - gas64: missing restoring of use of one virtual register on sqr for float (SARG)
@@ -120,7 +153,13 @@ Version 1.10.0
 - fbc: discard assignments and constructor calls in initializers that would write outside of the target when emitting initializer lists - previously, up-casted initializers were writing beyond the limits of the target and trashing memory
 - fix regression due to previous change on sf.net #917: optimization of 'm += s'.  The optimization failed to consider 's = s + expr' where expr might contain 's'.  In such a case, the optimization cannot be applied.
 - fbc: basic-macros: improve the handling of optional parens in function like macros by ending a macro argument list on the number of arguments expected (non-variadic macros only).
-- fbc: bad error recovery after overloaded operator [] caused compiler crash, for example if overloaded operator [] is found but can't be used due to mixing const and non-const types.
+- fbc: bad error recovery after overloaded operator [] caused compiler crash, for example if overloaded operator [] is found but can't be used due to mixing const and non-const types, or invalid members
+- fbc: improve error message 215 to indicate that only static members can be accessed from parameter intializers as well as static functions
+- fbc: #cmdline "-c ..." needs to restart parser since code generation is affected.  The implicit main was being emitted even when '-c' was give in #cmdline and was working differently than when '-c' given on the actual command line. 
+- fbc: extend lifetime of temporary variables in WITH TYPE(...) expressions to the END WITH statement
+- fbc: #cmdline "-r -rr -R -RR -o objfile ..." needs to restart the parser and handle changes in keeping the ASM file.  In the case of '-o objfile' a major restart is needed since some initialization of filenames is done before parsing starts.  By default the temporary ASM file was being kept even if #cmdline options indicate to keep it.
+- sf.net #569: gfxlib2: GetMouse/SetMouse scaling problem in QB modes Screen 2 & 8 - adjust GetMouse/SetMouse by internal scanline_size
+- fbc: fbc: fix bad error recovery on BYREF intializer.  'Dim Byref As UDT u = UDT()' would case compiler crash if UDT constructor argument optional
 
 
 Version 1.09.0
