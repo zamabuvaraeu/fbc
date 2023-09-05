@@ -1,4 +1,4 @@
-set FBC_DIR=C:\Programming\FreeBASIC-1.09.0-win64-gcc-9.3.0
+set FBC_DIR=C:\Program Files (x86)\FreeBASIC-1.10.0-winlibs-gcc-9.3.0
 set FBC_EXE_64="%FBC_DIR%\fbc64.exe"
 set FBC_EXE_32="%FBC_DIR%\fbc32.exe"
 set OPTIONS=-O 3 -gen gcc -Wc -ffunction-sections,-fdata-sections -Wl --gc-sections
