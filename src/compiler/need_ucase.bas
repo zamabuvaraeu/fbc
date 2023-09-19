@@ -413,6 +413,10 @@ Function NeedUCase( _
 			Return True
 		End If
 		
+		If srcU = "THIS" Then
+			Return True
+		End If
+		
 		If srcU = "__THISCALL" Then
 			Return True
 		End If
