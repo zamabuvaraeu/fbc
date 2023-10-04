@@ -9,6 +9,10 @@ Function NeedUCase( _
 	Dim srcU As String = UCase(src1)
 	
 	Scope
+		If srcU = "ASSERT" Then
+			Return True
+		End If
+		
 		If srcU = "MACRO" Then
 			Return True
 		End If
@@ -410,6 +414,10 @@ Function NeedUCase( _
 		End If
 		
 		If srcU = "STDCALL" Then
+			Return True
+		End If
+		
+		If srcU = "THIS" Then
 			Return True
 		End If
 		
