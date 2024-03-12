@@ -22,6 +22,7 @@ enum
 	PRINT_X
 	PRINT_FBLIBDIR
 	PRINT_SHA1
+	PRINT_FORK_ID
 end enum
 
 type FBC_EXTOPT
@@ -100,8 +101,10 @@ type FBCCTX
 	target              as zstring * FB_MAXNAMELEN+1  '' Target system identifier (e.g. a name like "win32", or a GNU triplet) to prefix in front of cross-compiling tool names
 	targetprefix        as zstring * FB_MAXNAMELEN+1  '' same, but with "-" appended, if there was a target id given; otherwise empty.
 #endif
+	sysroot             as zstring * FB_MAXPATHLEN+1
 	xbe_title           as zstring * FB_MAXNAMELEN+1  '' For the '-title <title>' xbox option
 	nodeflibs           as integer
+	nofbrt0             as integer  '' If we should exclude fbrt0.o or fbrt0pic.o (implied by nodeflibs, and optional by -nolib fbrt0.o,fbrt0pic.o)
 	staticlink          as integer
 	stripsymbols        as integer
 
@@ -118,7 +121,8 @@ type FBCCTX
 end type
 
 enum FBCTOOL
-	FBCTOOL_AS = 0
+	FBCTOOL_NONE = 0
+	FBCTOOL_AS
 	FBCTOOL_AR
 	FBCTOOL_LD
 	FBCTOOL_GCC
@@ -147,9 +151,10 @@ enum FBCTOOLFLAG
 end enum
 
 type FBCTOOLINFO
-	name as zstring * 16
+	name as zstring * 16                  '' default name of tool to invoke
+	env_variable as zstring * 16          '' environment variable to override
 	flags as FBCTOOLFLAG
-	path as zstring * (FB_MAXPATHLEN + 1)
+	path as zstring * (FB_MAXPATHLEN + 1) '' cached tool path and name
 end type
 
 #define fbctoolGetFlags( tool, f )   ((fbctoolTB( tool ).flags and (f)) <> 0)
@@ -159,21 +164,22 @@ end type
 '' must be same order as enum FBCTOOL
 static shared as FBCTOOLINFO fbctoolTB(0 to FBCTOOL__COUNT-1) = _
 { _
-	/' FBCTOOL_AS      '/ ( "as"     , FBCTOOLFLAG_DEFAULT  ), _
-	/' FBCTOOL_AR      '/ ( "ar"     , FBCTOOLFLAG_DEFAULT  ), _
-	/' FBCTOOL_LD      '/ ( "ld"     , FBCTOOLFLAG_DEFAULT  ), _
-	/' FBCTOOL_GCC     '/ ( "gcc"    , FBCTOOLFLAG_DEFAULT  ), _
-	/' FBCTOOL_LLC     '/ ( "llc"    , FBCTOOLFLAG_DEFAULT  ), _
-	/' FBCTOOL_CLANG   '/ ( "clang"  , FBCTOOLFLAG_DEFAULT  ), _
-	/' FBCTOOL_DLLTOOL '/ ( "dlltool", FBCTOOLFLAG_DEFAULT  ), _
-	/' FBCTOOL_GORC    '/ ( "GoRC"   , FBCTOOLFLAG_DEFAULT  ), _
-	/' FBCTOOL_WINDRES '/ ( "windres", FBCTOOLFLAG_DEFAULT  ), _
-	/' FBCTOOL_CXBE    '/ ( "cxbe"   , FBCTOOLFLAG_DEFAULT  ), _
-	/' FBCTOOL_DXEGEN  '/ ( "dxe3gen", FBCTOOLFLAG_DEFAULT  ), _
-	/' FBCTOOL_EMAS    '/ ( "emcc"   , FBCTOOLFLAG_DEFAULT  ), _
-	/' FBCTOOL_EMAR    '/ ( "emar"   , FBCTOOLFLAG_DEFAULT  ), _
-	/' FBCTOOL_EMLD    '/ ( "emcc"   , FBCTOOLFLAG_DEFAULT  ), _
-	/' FBCTOOL_EMCC    '/ ( "emcc"   , FBCTOOLFLAG_DEFAULT  )  _
+	/' FBCTOOL_NONE    '/ ( ""       , ""       , FBCTOOLFLAG_INVALID  ), _
+	/' FBCTOOL_AS      '/ ( "as"     , "AS"     , FBCTOOLFLAG_DEFAULT  ), _
+	/' FBCTOOL_AR      '/ ( "ar"     , "AR"     , FBCTOOLFLAG_DEFAULT  ), _
+	/' FBCTOOL_LD      '/ ( "ld"     , "LD"     , FBCTOOLFLAG_DEFAULT  ), _
+	/' FBCTOOL_GCC     '/ ( "gcc"    , "GCC"    , FBCTOOLFLAG_DEFAULT  ), _
+	/' FBCTOOL_LLC     '/ ( "llc"    , "LLC"    , FBCTOOLFLAG_DEFAULT  ), _
+	/' FBCTOOL_CLANG   '/ ( "clang"  , "CLANG"  , FBCTOOLFLAG_DEFAULT  ), _
+	/' FBCTOOL_DLLTOOL '/ ( "dlltool", "DLLTOOL", FBCTOOLFLAG_DEFAULT  ), _
+	/' FBCTOOL_GORC    '/ ( "GoRC"   , "GORC"   , FBCTOOLFLAG_DEFAULT  ), _
+	/' FBCTOOL_WINDRES '/ ( "windres", "WINDRES", FBCTOOLFLAG_DEFAULT  ), _
+	/' FBCTOOL_CXBE    '/ ( "cxbe"   , "CXBE"   , FBCTOOLFLAG_DEFAULT  ), _
+	/' FBCTOOL_DXEGEN  '/ ( "dxe3gen", "DXEGEN" , FBCTOOLFLAG_DEFAULT  ), _
+	/' FBCTOOL_EMAS    '/ ( "emcc"   , "EMAS"   , FBCTOOLFLAG_DEFAULT  ), _
+	/' FBCTOOL_EMAR    '/ ( "emar"   , "EMAR"   , FBCTOOLFLAG_DEFAULT  ), _
+	/' FBCTOOL_EMLD    '/ ( "emcc"   , "EMLD"   , FBCTOOLFLAG_DEFAULT  ), _
+	/' FBCTOOL_EMCC    '/ ( "emcc"   , "EMCC"   , FBCTOOLFLAG_DEFAULT  )  _
 }
 
 declare sub fbcFindBin _
@@ -253,8 +259,9 @@ private sub hSetOutName( )
 		case FB_COMPTARGET_CYGWIN, FB_COMPTARGET_WIN32
 			fbc.outname += ".dll"
 		case FB_COMPTARGET_LINUX, FB_COMPTARGET_DARWIN, _
-			FB_COMPTARGET_FREEBSD, FB_COMPTARGET_OPENBSD, _
-			FB_COMPTARGET_NETBSD, FB_COMPTARGET_DRAGONFLY, FB_COMPTARGET_SOLARIS
+		     FB_COMPTARGET_FREEBSD, FB_COMPTARGET_OPENBSD, _
+		     FB_COMPTARGET_NETBSD, FB_COMPTARGET_DRAGONFLY, _
+		     FB_COMPTARGET_SOLARIS, FB_COMPTARGET_ANDROID
 			fbc.outname = hStripFilename( fbc.outname ) + _
 				"lib" + hStripPath( fbc.outname ) + ".so"
 		case FB_COMPTARGET_DOS
@@ -304,11 +311,19 @@ private function hGet1stOutputLineFromCommand( byref cmd as string ) as string
 	return ln
 end function
 
-'' Pass some arguments to gcc and read the results. Returns an empty string on
+'' Pass some arguments to gcc/clang and read the results. Returns an empty string on
 '' an error.
-private function fbcQueryGcc( byref options as string ) as string
+private function fbcQueryCC( byref options as string ) as string
 	dim as string path
-	fbcFindBin( FBCTOOL_GCC, path )
+
+	select case( fbGetOption( FB_COMPOPT_BACKEND ) )
+	case FB_BACKEND_CLANG
+		fbcFindBin( FBCTOOL_CLANG, path )
+
+	'' For gcc backend and all other backends assume we want to query gcc
+	case else
+		fbcFindBin( FBCTOOL_GCC, path )
+	end select
 
 	select case( fbGetCpuFamily( ) )
 	case FB_CPUFAMILY_X86
@@ -365,7 +380,20 @@ private function fbcBuildPathToLibFile( byval file as zstring ptr ) as string
 
 	found = fbc.libpath + FB_HOST_PATHDIV + *file
 
-#ifndef ENABLE_STANDALONE
+	#ifdef ENABLE_STANDALONE
+	'' running a standalone version of fbc to build with android
+	'' ndk is not recommended, but if we are, try and query the
+	'' sysroot if it wasn't already supplied.  Otherwise
+	'' if with are running a standalone fbc, just return the
+	'' computed library file name if we didn't explicitly pass
+	'' in a -sysroot
+	if( fbGetOption( FB_COMPOPT_TARGET ) <> FB_COMPTARGET_ANDROID ) then
+		if( len( fbc.sysroot ) = 0 ) then
+			return found
+		end if
+	end if
+	#endif
+
 	'' Does it exist in our lib/?
 	if( hFileExists( found ) ) then
 		'' Overrides anything else
@@ -374,7 +402,14 @@ private function fbcBuildPathToLibFile( byval file as zstring ptr ) as string
 
 	'' Not found in our lib/, query the target-specific gcc
 	dim as string path
-	fbcFindBin( FBCTOOL_GCC, path )
+	select case( fbGetOption( FB_COMPOPT_BACKEND ) )
+	case FB_BACKEND_CLANG
+		fbcFindBin( FBCTOOL_CLANG, path )
+
+	'' For gcc backend and all other backends assume we want to query gcc
+	case else
+		fbcFindBin( FBCTOOL_GCC, path )
+	end select
 
 	select case( fbGetCpuFamily( ) )
 	case FB_CPUFAMILY_X86
@@ -387,6 +422,10 @@ private function fbcBuildPathToLibFile( byval file as zstring ptr ) as string
 		path += " -m64"
 	end select
 
+	if( len( fbc.sysroot ) ) then
+		path += " --sysroot=" + fbc.sysroot
+	end if
+
 	path += " -print-file-name=" + *file
 
 	found = hGet1stOutputLineFromCommand( path )
@@ -397,9 +436,27 @@ private function fbcBuildPathToLibFile( byval file as zstring ptr ) as string
 	if( found = hStripPath( found ) ) then
 		exit function
 	end if
-#endif
 
 	function = found
+end function
+
+'' gcc may have a default sysroot which we need to pass on to ld. Or it may not know the sysroot.
+private function fbcFindSysroot( ) as string
+	'' Query the target-specific gcc
+	'' (TODO: need to tell which arch and ABI we are targetting, especially on android)
+	dim as string path
+
+	select case( fbGetOption( FB_COMPOPT_BACKEND ) )
+	case FB_BACKEND_CLANG
+		fbcFindBin( FBCTOOL_CLANG, path )
+
+	'' For gcc backend and all other backends assume we want to query gcc
+	case else
+		fbcFindBin( FBCTOOL_GCC, path )
+	end select
+
+	path += " --print-sysroot"
+	return hGet1stOutputLineFromCommand( path )
 end function
 
 '' Retrieve the path to a library file, or an empty string if it can't be found.
@@ -445,7 +502,7 @@ private sub fbcFindBin _
 
 	'' a) Use the path from the corresponding environment variable if it's set
 	if( (fbctoolTB(tool).flags and FBCTOOLFLAG_CAN_USE_ENVIRON) <> 0 ) then
-		path = environ( ucase( fbctoolTB(tool).name ) )
+		path = environ( fbctoolTB(tool).env_variable )
 	end if
 
 	if( len( path ) = 0 ) then
@@ -461,13 +518,13 @@ private sub fbcFindBin _
 		#ifndef ENABLE_STANDALONE
 			if( hFileExists( path ) = FALSE ) then
 				select case fbGetOption( FB_COMPOPT_BACKEND )
-				case FB_BACKEND_GCC
+				case FB_BACKEND_GCC, FB_BACKEND_CLANG
 					'' c) Ask GCC where it is, if applicable (GCC might have its
 					'' own copy which we must use instead of the system one)
 					if( tool = FBCTOOL_AS ) then
-						path = fbcQueryGcc( " -print-prog-name=as" )
+						path = fbcQueryCC( " -print-prog-name=as" )
 					elseif( tool = FBCTOOL_LD ) then
-						path = fbcQueryGcc( " -print-prog-name=ld" )
+						path = fbcQueryCC( " -print-prog-name=ld" )
 					end if
 				case FB_BACKEND_GAS, FB_BACKEND_GAS64
 					#if defined( __FB_FREEBSD__ )
@@ -731,6 +788,49 @@ private function hLinkFiles( ) as integer
 		case FB_CPUFAMILY_ARM
 			ldcline += "-m armelf_linux_eabi "
 		end select
+	case FB_COMPTARGET_ANDROID
+		if( (len( fbc.sysroot ) = 0) and _
+		    (fbGetOption( FB_COMPOPT_BACKEND ) = FB_BACKEND_GCC) ) then
+			'' Newer NDKs use clang which doesn't support -print-sysroot,
+			'' and we don't need it.
+			'' GCC in older NDKs may need the sysroot before calling hFindLib().
+			'' At least in older NDKs, if a standalone NDK toolchain (for a particular
+			'' platform+arch) is used then gcc --print-sysroot returns the correct
+			'' sysroot. Otherwise, running directly from a full NDK install, it prints a
+			'' /tmp/... directory, and the user needs to manually pass the correct sysroot.
+			'' The link-time sysroot should be $NDK/platforms/android-$API/arch-$ARCH
+			'' (Since NDK r15, the sysroot for the C headers is $NDK/sysroot, but we
+			'' don't need them.)
+			fbc.sysroot = fbcFindSysroot( )
+			if( left( fbc.sysroot, 5 ) = "/tmp/" ) then
+				errReportWarnEx( FB_WARNINGMSG_MISSINGANDROIDSYSROOT, , 0 )
+			end if
+		end if
+
+		'' The compiler runtime support library, usually called libgcc on other platforms
+		'' (even when using clang) or when using gcc in older NDK, varies by target, something
+		'' like libclang_rt.builtins-aarch64-android.a
+		var args = ""
+#ifndef ENABLE_STANDALONE
+		if( len( fbc.target ) > 0 ) then
+			'' Without the correct -target, clang just returns the host libgcc.
+			args = " -target " & fbc.target
+		end if
+#endif
+		args &= " -print-libgcc-file-name"
+		var path = fbcQueryCC( args )
+		ldcline &= path & " "
+
+		'' androideabi-v7a ABI requires extra linker options; apparently
+		'' others don't. See https://developer.android.com/ndk/guides/standalone_toolchain.html
+		if( fbGetOption( FB_COMPOPT_CPUTYPE ) = FB_CPUTYPE_ARMV7A ) then
+			ldcline += "--fix-cortex-a8 "
+		end if
+		'' Optional?
+		' select case( fbGetCpuFamily( ) )
+		' case FB_CPUFAMILY_X86
+		'   ldcline += "-m elf_i386 "
+		' end select
 	case FB_COMPTARGET_DARWIN
 		select case( fbGetCpuFamily( ) )
 		case FB_CPUFAMILY_X86
@@ -748,15 +848,15 @@ private function hLinkFiles( ) as integer
 
 	'' dll dos targets need to run DXE3GEN
 	if (fbGetOption( FB_COMPOPT_TARGET ) = FB_COMPTARGET_DOS) and _
-	(fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB) then
+	   (fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB) then
 		'' Building an import library is usable but need to watch
 		'' the initialization order.  libfb exports need to be
 		'' initialized before trying to load the DXE.  FYI, if this
 		'' is handled at load time by the loader code (global
 		'' constructor) user may have issues with the ctor order.
 		'' Which means that user is expected to have called
-		'' defined a call to DyLibLoad("") in a global ctor and
-		'' no other global ctors that depend on libfb functions
+		'' DyLibLoad("") in a global ctor and no other global ctors
+		'' that depend on libfb functions are defined
 		''
 		ldcline += " -I ""lib" + hStripExt( fbc.outname ) + "_il.a"""
 		''
@@ -839,8 +939,9 @@ private function hLinkFiles( ) as integer
 		end if
 
 	case FB_COMPTARGET_LINUX, FB_COMPTARGET_DARWIN, _
-		FB_COMPTARGET_FREEBSD, FB_COMPTARGET_OPENBSD, _
-		FB_COMPTARGET_NETBSD, FB_COMPTARGET_DRAGONFLY, FB_COMPTARGET_SOLARIS
+	     FB_COMPTARGET_FREEBSD, FB_COMPTARGET_OPENBSD, _
+	     FB_COMPTARGET_NETBSD, FB_COMPTARGET_DRAGONFLY, _
+	     FB_COMPTARGET_SOLARIS, FB_COMPTARGET_ANDROID
 
 		if( fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB ) then
 			dllname = hStripPath( hStripExt( fbc.outname ) )
@@ -873,6 +974,8 @@ private function hLinkFiles( ) as integer
 				ldcline += " -dynamic-linker /usr/libexec/ld.elf_so"
 			case FB_COMPTARGET_OPENBSD
 				ldcline += " -dynamic-linker /usr/libexec/ld.so"
+			case FB_COMPTARGET_ANDROID
+				ldcline += " -dynamic-linker /system/bin/linker"
 			end select
 		end if
 
@@ -973,6 +1076,20 @@ private function hLinkFiles( ) as integer
 		ldcline += " -Bstatic"
 	end if
 
+	if( fbGetOption( FB_COMPOPT_PIC ) ) then
+		if( fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_EXECUTABLE ) then
+			'' NOTE: For android 4.0-, user will need to pass in '-Wl -no-pie'
+			''       to override this default.
+			''       On android 4.1+ this is accepted, and on android 5.0+
+			''       is required. For android 4.0- this will probably link
+			''       but then segfault when executed on the device.
+
+			ldcline += " -pie"
+		else
+			'' Dynamic library: no flag needed
+		end if
+	end if
+
 	if( len( fbc.mapfile ) > 0) then
 		ldcline += " -Map " + fbc.mapfile
 	end if
@@ -1005,6 +1122,11 @@ private function hLinkFiles( ) as integer
 			i = listGetNext(i)
 		wend
 	end scope
+
+	'' And the sysroot
+	if( len( fbc.sysroot ) ) then
+		ldcline += " --sysroot=" + fbc.sysroot
+	end if
 
 	'' crt begin objects
 	select case as const fbGetOption( FB_COMPOPT_TARGET )
@@ -1075,13 +1197,25 @@ private function hLinkFiles( ) as integer
 			end if
 		end if
 
+	case FB_COMPTARGET_ANDROID
+		if( fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_EXECUTABLE) then
+			if( fbc.staticlink ) then
+				ldcline += hFindLib( "crtbegin_static.o" )
+			else
+				ldcline += hFindLib( "crtbegin_dynamic.o" )
+			end if
+		else
+			'' FB_OUTTYPE_DYNAMICLIB
+			ldcline += hFindLib( "crtbegin_so.o" )
+		end if
+
 	case FB_COMPTARGET_XBOX
 		'' link with crt0.o (C runtime init)
 		ldcline += hFindLib( "crt0.o" )
 
 	end select
 
-	if( fbc.nodeflibs = FALSE ) then
+	if( fbc.nofbrt0 = FALSE ) then
 		'' don't add the fbrt0 if compiling for javascript, because global constructors and destructors are not supported by emscripten
 		if( fbGetOption( FB_COMPOPT_TARGET ) <> FB_COMPTARGET_JS ) then
 			ldcline += " """ + fbc.libpath + FB_HOST_PATHDIV
@@ -1104,7 +1238,7 @@ private function hLinkFiles( ) as integer
 
 	'' Begin of lib group
 	'' All libraries are passed inside -( -) so we don't need to worry as
-	'' much about their order and/or listing them repeatedly.
+	'' much about their order and/or listing them repeatedly. (Not supported by Darwin ld)
 	if ( fbGetOption( FB_COMPOPT_TARGET ) <> FB_COMPTARGET_DARWIN ) then
 		if( fbGetOption( FB_COMPOPT_TARGET ) <> FB_COMPTARGET_JS ) then
 			ldcline += " ""-("""
@@ -1157,6 +1291,14 @@ private function hLinkFiles( ) as integer
 		end if
 		if (fbGetOption( FB_COMPOPT_TARGET ) <> FB_COMPTARGET_OPENBSD) then
 			ldcline += hFindLib( "crtn.o" )
+		end if
+
+	case FB_COMPTARGET_ANDROID
+		if( fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_EXECUTABLE) then
+			ldcline += hFindLib( "crtend_android.o" )
+		else
+			'' FB_OUTTYPE_DYNAMICLIB
+			ldcline += hFindLib( "crtend_so.o" )
 		end if
 
 	case FB_COMPTARGET_WIN32
@@ -1264,7 +1406,8 @@ private function hLinkFiles( ) as integer
 			exit function
 		end if
 
-		put #f, 533, clng( fbGetOption( FB_COMPOPT_STACKSIZE ) )
+		dim value as long = clng( fbGetOption( FB_COMPOPT_STACKSIZE ) )
+		put #f, 533, value
 
 		close #f
 
@@ -1484,6 +1627,7 @@ end type
 '' OS name strings recognized when parsing GNU triplets (-target option)
 dim shared as FBGNUOSINFO gnuosmap(0 to ...) => _
 { _
+	(@"android"    , FB_COMPTARGET_ANDROID  ), _ '' Must appear before linux
 	(@"linux"      , FB_COMPTARGET_LINUX    ), _
 	(@"mingw"      , FB_COMPTARGET_WIN32    ), _
 	(@"djgpp"      , FB_COMPTARGET_DOS      ), _
@@ -1508,8 +1652,11 @@ dim shared as FBGNUARCHINFO gnuarchmap(0 to ...) => _
 	(@"x86"        , FB_DEFAULT_CPUTYPE_X86    ), _
 	(@"x86_64"     , FB_DEFAULT_CPUTYPE_X86_64 ), _
 	(@"amd64"      , FB_DEFAULT_CPUTYPE_X86_64 ), _
+	(@"armv5te"    , FB_CPUTYPE_ARMV5TE        ), _
 	(@"armv6"      , FB_CPUTYPE_ARMV6          ), _
+	(@"armv6+fp"   , FB_CPUTYPE_ARMV6_FP       ), _
 	(@"armv7a"     , FB_CPUTYPE_ARMV7A         ), _
+	(@"armv7a+fp"  , FB_CPUTYPE_ARMV7A_FP      ), _
 	(@"arm"        , FB_DEFAULT_CPUTYPE_ARM    ), _
 	(@"aarch64"    , FB_DEFAULT_CPUTYPE_AARCH64), _
 	(@"ppc"        , FB_DEFAULT_CPUTYPE_PPC    ), _
@@ -1529,10 +1676,12 @@ private sub hParseGnuTriplet _
 		byref os as integer, _
 		byref cputype as integer _
 	)
+	dim arch as string
 
 	'' Search for OS, it be anywere in the triplet:
 	''    mingw32              -> mingw
 	''    arm-linux-gnueabihf  -> linux
+	''    arm-linux-androideabi-> android
 	''    i686-w64-mingw32     -> mingw
 	''    i686-pc-linux-gnu    -> linux
 	''    i386-pc-msdosdjgpp   -> dos386
@@ -1546,9 +1695,9 @@ private sub hParseGnuTriplet _
 	next
 
 	'' If the triplet has at least two components (<arch>-<...>),
-	'' extract the first (the architecture and try to identify it.
+	'' extract the first (the architecture) and try to identify it.
 	if( separator > 0 ) then
-		var arch = left( arg, separator - 1 )
+		arch = left( arg, separator - 1 )
 		for i as integer = 0 to ubound( gnuarchmap )
 			if( arch = *gnuarchmap(i).gnuid ) then
 				cputype = gnuarchmap(i).cputype
@@ -1588,12 +1737,15 @@ dim shared as FBOSARCHINFO fbosarchmap(0 to ...) => _
 	_ '' OS given without arch, using the default arch, except for dos/xbox
 	_ ''  which only work with x86, so we can always default to x86 for them.
 	_ '' (these are supported for backwards compatibility with x86-only FB)
+	_ '' When targetting android assume cross-compiling.
+	_ '' armv7a is the default arch for android ndk r11 and later
 	(@"dos"    , FB_COMPTARGET_DOS    , FB_DEFAULT_CPUTYPE_X86   ), _
 	(@"xbox"   , FB_COMPTARGET_XBOX   , FB_DEFAULT_CPUTYPE_X86   ), _
 	(@"cygwin" , FB_COMPTARGET_CYGWIN , FB_DEFAULT_CPUTYPE       ), _
 	(@"darwin" , FB_COMPTARGET_DARWIN , FB_DEFAULT_CPUTYPE       ), _
 	(@"freebsd", FB_COMPTARGET_FREEBSD, FB_DEFAULT_CPUTYPE       ), _
 	(@"linux"  , FB_COMPTARGET_LINUX  , FB_DEFAULT_CPUTYPE       ), _
+	(@"android", FB_COMPTARGET_ANDROID, FB_CPUTYPE_ARMV7A        ), _
 	(@"netbsd" , FB_COMPTARGET_NETBSD , FB_DEFAULT_CPUTYPE       ), _
 	(@"openbsd", FB_COMPTARGET_OPENBSD, FB_DEFAULT_CPUTYPE       )  _
 }
@@ -1608,13 +1760,22 @@ dim shared as FBOSARCHINFO fbosarchmap(0 to ...) => _
 ''    -target linux           ->    Linux + default arch
 ''    -target linux-x86       ->    Linux + default x86 arch
 ''    -target linux-x86_64    ->    Linux + x86_64
+''    -target android         ->    Android + ARMv7a (the default ARM)
 ''    ...
 ''
 '' The normal (non-standalone) build also accepts GNU triplets:
 '' (the rough format is <arch>-<vendor>-<os> but it can vary a lot)
-''    -target i686-pc-linux-gnu      ->    Linux + i686
-''    -target arm-linux-gnueabihf    ->    Linux + default ARM arch
-''    -target x86_64-w64-mingw32     ->    Windows + x86_64
+''    -target i686-pc-linux-gnu        ->    Linux + i686
+''    -target arm-linux-gnueabihf      ->    Linux + default ARM arch
+''    -target arm-android              ->    android-arm, armv7-a, 32bit
+''    -target android -arch armv5      ->    android-arm, armv5te, 32bit
+''    -target armv5te-linux-android    ->    android-arm, armv5te, 32bit
+''    -target android -arch armv7      ->    android-arm, armv7-a, 32bit
+''    -target arm-linux-android        ->    android-arm, armv7-a, 32bit
+''    -target armv7a-linux-android     ->    android-arm, armv7-a, 32bit
+''    -target armv7a-linux-androideabi ->    android-arm, armv7-a, 32bit
+''    -target i686-linux-android       ->    android-x86, 686, 32bit
+''    -target x86_64-w64-mingw32       ->    Windows + x86_64
 ''    ...
 ''
 '' The normal build uses the -target argument as prefix for binutils/gcc tools.
@@ -1671,7 +1832,7 @@ private sub hParseTargetArg _
 	var separator = instr( arg, "-" )
 	if( separator > 0 ) then
 		os = fbIdentifyOs( left( lcasearg, separator - 1 ) )
-		cputype = fbCpuTypeFromCpuFamilyId( right( lcasearg, len( lcasearg ) - separator ) )
+		cputype = fbDefaultCpuTypeFromCpuFamilyId( os, right( lcasearg, len( lcasearg ) - separator ) )
 
 		'' allow normalizing on gnu arch types to determine the standalone targetid
 		#ifdef ENABLE_STANDALONE
@@ -1754,6 +1915,7 @@ enum
 	OPT_SHOWINCLUDES
 	OPT_STATIC
 	OPT_STRIP
+	OPT_SYSROOT
 	OPT_T
 	OPT_TARGET
 	OPT_TITLE
@@ -1837,6 +1999,7 @@ dim shared as FBC_CMDLINE_OPTION cmdlineOptionTB(0 to (OPT__COUNT - 1)) = _
 	( FALSE, TRUE , FALSE, TRUE  ), _ '' OPT_SHOWINCLUDES affects compiler output display
 	( FALSE, TRUE , FALSE, FALSE ), _ '' OPT_STATIC       affects link
 	( FALSE, TRUE , FALSE, FALSE ), _ '' OPT_STRIP        affects link
+	( TRUE,  TRUE , FALSE, FALSE ), _ '' OPT_SYSROOT      affects link
 	( TRUE , TRUE , FALSE, FALSE ), _ '' OPT_T            affects link
 	( TRUE , TRUE , TRUE , TRUE  ), _ '' OPT_TARGET       affects major initialization
 	( TRUE , TRUE , FALSE, FALSE ), _ '' OPT_TITLE        affects link
@@ -1863,6 +2026,7 @@ private sub handleOpt _
 		fbcAddObj( arg )
 
 	case OPT_ARCH
+		'' Set cputype later, so it overrides -target
 		fbc.cputype_is_native = (arg = "native")
 		fbc.cputype = fbIdentifyFbcArch( arg )
 		if( fbc.cputype < 0 ) then
@@ -1886,7 +2050,7 @@ private sub handleOpt _
 		fbc.buildprefix = arg
 
 	case OPT_C
-		'' -c changes the output type to from exe/lib/dll to object,
+		'' -c changes the output type from exe/lib/dll to object,
 		'' overwriting previous -dll, -lib or the default exe.
 		fbSetOption( FB_COMPOPT_OUTTYPE, FB_OUTTYPE_OBJECT )
 		fbc.keepobj = TRUE
@@ -1992,6 +2156,8 @@ private sub handleOpt _
 			value = FB_FPUTYPE_FPU
 		case "SSE"
 			value = FB_FPUTYPE_SSE
+		case "NEON"
+			value = FB_FPUTYPE_NEON
 		case else
 			hFatalInvalidOption( arg, is_source )
 		end select
@@ -2009,6 +2175,8 @@ private sub handleOpt _
 			fbc.backend = FB_BACKEND_GAS
 		case "gcc"
 			fbc.backend = FB_BACKEND_GCC
+		case "clang"
+			fbc.backend = FB_BACKEND_CLANG
 		case "llvm"
 			fbc.backend = FB_BACKEND_LLVM
 		Case "gas64"
@@ -2075,6 +2243,7 @@ private sub handleOpt _
 
 	case OPT_NODEFLIBS
 		fbc.nodeflibs = TRUE
+		fbc.nofbrt0 = TRUE
 
 	case OPT_NOERRLINE
 		fbSetOption( FB_COMPOPT_SHOWERROR, FALSE )
@@ -2146,6 +2315,7 @@ private sub handleOpt _
 		case "x"      : fbc.print = PRINT_X
 		case "fblibdir" : fbc.print = PRINT_FBLIBDIR
 		case "sha-1"  : fbc.print = PRINT_SHA1
+		case "fork-id": fbc.print = PRINT_FORK_ID
 		case else
 			hFatalInvalidOption( arg, is_source )
 		end select
@@ -2188,6 +2358,9 @@ private sub handleOpt _
 
 	case OPT_STRIP
 		fbc.stripsymbols = TRUE
+
+	case OPT_SYSROOT
+		fbc.sysroot = arg
 
 	case OPT_T
 		fbSetOption( FB_COMPOPT_STACKSIZE, clng( arg ) * 1024 )
@@ -2337,6 +2510,8 @@ private sub handleOpt _
 			fbSetOption( FB_COMPOPT_NOCMDLINE, TRUE )
 		case "retinflts"
 			fbSetOption( FB_COMPOPT_RETURNINFLTS, TRUE )
+		case "nobuiltins"
+			fbSetOption( FB_COMPOPT_NOBUILTINS, TRUE )
 		case else
 			hFatalInvalidOption( arg, is_source )
 		end select
@@ -2454,6 +2629,7 @@ private function parseOption(byval opt as zstring ptr) as integer
 		CHECK("showincludes", OPT_SHOWINCLUDES)
 		CHECK("static", OPT_STATIC)
 		CHECK("strip", OPT_STRIP)
+		CHECK("sysroot", OPT_SYSROOT)
 
 	case asc("t")
 		ONECHAR(OPT_T)
@@ -2711,15 +2887,26 @@ private sub parseArgsFromFile _
 	close #f
 end sub
 
+'' Whether a target needs shared libraries to be built with PIC.
+'' (Note: Android 5.0+ also need executables to be built with PIC (gcc -pie argument),
+'' but Android <4.1 didn't support PIE executables. We assume 4.1+.)
 private function hTargetNeedsPIC( ) as integer
 	function = FALSE
 	if( fbGetCpuFamily( ) <> FB_CPUFAMILY_X86 ) then
 		select case as const( fbGetOption( FB_COMPOPT_TARGET ) )
 		case FB_COMPTARGET_LINUX, FB_COMPTARGET_FREEBSD, _
-			FB_COMPTARGET_OPENBSD, FB_COMPTARGET_NETBSD, _
-			FB_COMPTARGET_DRAGONFLY, FB_COMPTARGET_SOLARIS
+		     FB_COMPTARGET_OPENBSD, FB_COMPTARGET_NETBSD, _
+		     FB_COMPTARGET_DRAGONFLY, FB_COMPTARGET_SOLARIS, _
+		     FB_COMPTARGET_ANDROID
 			function = TRUE
 		end select
+	else
+		'' On android-x86, PIC is necessary even to access globals in dynamic
+		'' libraries, because the runtime linker doesn't support usual relocation types.
+		'' GCC defaults to -fPIC anyway, but we need to be aware of whether PIC is used.
+		if( fbGetOption( FB_COMPOPT_TARGET ) = FB_COMPTARGET_ANDROID ) then
+			function = TRUE
+		end if
 	end if
 end function
 
@@ -2749,13 +2936,26 @@ private sub hCheckArgs()
 	''
 	'' Check for incompatible options etc.
 	''
-
-	if ( fbGetOption( FB_COMPOPT_FPUTYPE ) = FB_FPUTYPE_FPU ) then
-		if( fbGetOption( FB_COMPOPT_VECTORIZE ) >= FB_VECTORIZE_NORMAL ) then
+	select case( fbGetOption( FB_COMPOPT_FPUTYPE ) )
+	case FB_FPUTYPE_FPU
+		if( fbGetOption( FB_COMPOPT_VECTORIZE ) >= FB_VECTORIZE_NORMAL ) or _
+		    ( fbGetOption( FB_COMPOPT_FPMODE ) = FB_FPMODE_FAST ) then
 			errReportEx( FB_ERRMSG_OPTIONREQUIRESSSE, "", -1 )
 			fbcEnd( 1 )
 		end if
-	end if
+	case FB_FPUTYPE_SSE
+		if( (fbGetCpuFamily( ) <> FB_CPUFAMILY_X86) and _
+		    (fbGetCpuFamily( ) <> FB_CPUFAMILY_X86_64) ) then
+			errReportEx( FB_ERRMSG_SSEREQUIRESX86, "", -1 )
+			fbcEnd( 1 )
+		end if
+	case FB_FPUTYPE_NEON
+		if( (fbGetCpuFamily( ) <> FB_CPUFAMILY_ARM) and _
+		    (fbGetCpuFamily( ) <> FB_CPUFAMILY_AARCH64) ) then
+			errReportEx( FB_ERRMSG_NEONREQUIRESARM, "", -1 )
+			fbcEnd( 1 )
+		end if
+	end select
 
 	'' 1. The compiler (fb.bas) starts with default target settings for
 	''    native compilation.
@@ -2767,11 +2967,33 @@ private sub hCheckArgs()
 		fbSetOption( FB_COMPOPT_CPUTYPE, fbc.cputype )
 	end if
 
+	'' NEON implies at least armv7-a
+	if( (fbGetOption( FB_COMPOPT_FPUTYPE ) = FB_FPUTYPE_NEON) and _
+	    (fbGetOption( FB_COMPOPT_CPUTYPE ) < FB_CPUTYPE_ARMV7A) ) then
+		fbSetOption( FB_COMPOPT_CPUTYPE, FB_CPUTYPE_ARMV7A )
+	end if
+
 	'' 4. Check for target/arch conflicts, e.g. dos and non-x86
 	if( (fbGetOption( FB_COMPOPT_TARGET ) = FB_COMPTARGET_DOS) and _
 		(fbGetCpuFamily( ) <> FB_CPUFAMILY_X86) ) then
 		errReportEx( FB_ERRMSG_DOSWITHNONX86, fbGetFbcArch( ), -1 )
 		fbcEnd( 1 )
+	end if
+
+	'' 4.5. Enable -pic automatically when building a Unix shared library
+	''      or Android executable (required on Android 5+)
+	if( (fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB) or _
+	    (fbGetOption( FB_COMPOPT_TARGET ) = FB_COMPTARGET_ANDROID) ) then
+		if( hTargetNeedsPIC( ) ) then
+			fbSetOption( FB_COMPOPT_PIC, TRUE )
+		end if
+	end if
+
+	'' Complain if -pic was given in cases where it's not needed/supported
+	if( fbGetOption( FB_COMPOPT_PIC ) ) then
+		if( hTargetNeedsPIC( ) = FALSE ) then
+			errReportEx( FB_ERRMSG_PICNOTSUPPORTEDFORTARGET, "", -1 )
+		end if
 	end if
 
 	'' 5. Select default backend based on selected arch, e.g. when compiling
@@ -2791,6 +3013,12 @@ private sub hCheckArgs()
 	else
 		fbSetOption( FB_COMPOPT_BACKEND, FB_BACKEND_GCC )
 	end if
+	'' gas/gas64 doesn't currently support PIC
+	if( ((fbGetOption( FB_COMPOPT_BACKEND ) = FB_BACKEND_GAS) or _
+	     (fbGetOption( FB_COMPOPT_BACKEND ) = FB_BACKEND_GAS64)) and _
+	    fbGetOption( FB_COMPOPT_PIC ) ) then
+		fbSetOption( FB_COMPOPT_BACKEND, FB_BACKEND_GCC )
+	end if
 
 	'' 6. -gen overrides any other backend setting.
 	if( fbc.backend >= 0 ) then
@@ -2798,12 +3026,20 @@ private sub hCheckArgs()
 	end if
 
 	'' 7. Check whether backend supports the target/arch.
-	'' -gen gas with non-x86 arch isn't possible.
+	'' -gen gas with non-x86 arch or with PIC isn't possible.
+	'' -gen gas64 with non-x86_64 or with PIC isn't possible.
 	if( ((fbGetOption( FB_COMPOPT_BACKEND ) = FB_BACKEND_GAS) and _
-		(fbGetCpuFamily( ) <> FB_CPUFAMILY_X86)) _
-		or ((fbGetOption( FB_COMPOPT_BACKEND ) = FB_BACKEND_GAS64) and _
-		(fbGetCpuFamily( ) <> FB_CPUFAMILY_X86_64)) ) then
+	    (fbGetCpuFamily( ) <> FB_CPUFAMILY_X86)) or _
+	    ((fbGetOption( FB_COMPOPT_BACKEND ) = FB_BACKEND_GAS64) and _
+	    (fbGetCpuFamily( ) <> FB_CPUFAMILY_X86_64)) ) then
 		errReportEx( FB_ERRMSG_GENGASWITHNONX86, fbGetFbcArch( ), -1 )
+		fbcEnd( 1 )
+	end if
+
+	if( ((fbGetOption( FB_COMPOPT_BACKEND ) = FB_BACKEND_GAS) or _
+	     (fbGetOption( FB_COMPOPT_BACKEND ) = FB_BACKEND_GAS64)) and _
+	    fbGetOption( FB_COMPOPT_PIC ) ) then
+		errReportEx( FB_ERRMSG_GENGASWITHPIC, "", -1 )
 		fbcEnd( 1 )
 	end if
 
@@ -2849,29 +3085,15 @@ private sub hCheckArgs()
 		end select
 
 		'' -gen gas only supports -asm intel
-		if( ( (fbGetOption( FB_COMPOPT_BACKEND ) = FB_BACKEND_GAS) or (fbGetOption( FB_COMPOPT_BACKEND ) = FB_BACKEND_GAS64) ) and _
-			(fbc.asmsyntax <> FB_ASMSYNTAX_INTEL) ) then
-			errReportEx( FB_ERRMSG_GENGASWITHOUTINTEL, "", -1 )
-		end if
+		select case fbGetOption( FB_COMPOPT_BACKEND )
+		case FB_BACKEND_GAS, FB_BACKEND_GAS64
+			if( fbc.asmsyntax <> FB_ASMSYNTAX_INTEL ) then
+				errReportEx( FB_ERRMSG_GENGASWITHOUTINTEL, "", -1 )
+			end if
+		end select
 
 		'' -asm overrides the target's default
 		fbSetOption( FB_COMPOPT_ASMSYNTAX, fbc.asmsyntax )
-	end if
-
-	'' Enable -pic automatically when building a shared library on non-x86 Unixes
-	if( fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_DYNAMICLIB ) then
-		if( hTargetNeedsPIC( ) ) then
-			fbSetOption( FB_COMPOPT_PIC, TRUE )
-		end if
-	end if
-
-	'' Complain if -pic was given in cases where it's not needed/supported
-	if( fbGetOption( FB_COMPOPT_PIC ) ) then
-		if( fbGetOption( FB_COMPOPT_OUTTYPE ) = FB_OUTTYPE_EXECUTABLE ) then
-			errReportEx( FB_ERRMSG_PICNOTSUPPORTEDFOREXE, "", -1 )
-		elseif( hTargetNeedsPIC( ) = FALSE ) then
-			errReportEx( FB_ERRMSG_PICNOTSUPPORTEDFORTARGET, "", -1 )
-		end if
 	end if
 
 	'' Update the stacksize for the current target options if
@@ -2945,6 +3167,13 @@ private sub fbcSetupCompilerPaths( )
 	''     "prefix/bin/" + "ld"
 	''     "prefix/bin/i686-w64-mingw32-" + "ld"
 	''
+	''
+	'' NOTE: Android armeabi and armeabi-v7a ABIs have the same FB target id,
+	'' arm-android.  We could have a separate target id called armv7a-android,
+	'' but the improvements to performance of libfb would be pretty minor
+	'' anyway (there is very little use of floating point), so it's simpler to
+	'' just use libraries built for armeabi for both abis. libfbgfx and other
+	'' libraries would be a different matter, so in future maybe change this.
 
 	dim as string targetid = fbGetTargetId( )
 
@@ -3045,7 +3274,7 @@ private function hGetAsmName _
 	end if
 	if( stage = 1 ) then
 		select case( fbGetOption( FB_COMPOPT_BACKEND ) )
-		case FB_BACKEND_GCC
+		case FB_BACKEND_GCC, FB_BACKEND_CLANG
 			ext = @".c"
 		case FB_BACKEND_LLVM
 			ext = @".ll"
@@ -3397,7 +3626,7 @@ private function hCompileStage2Module( byval module as FBCIOFILE ptr ) as intege
 	end if
 
 	select case( fbGetOption( FB_COMPOPT_BACKEND ) )
-	case FB_BACKEND_GCC
+	case FB_BACKEND_GCC, FB_BACKEND_CLANG
 		dim as boolean ism64target = false
 		select case( fbGetCpuFamily( ) )
 		case FB_CPUFAMILY_X86
@@ -3413,21 +3642,29 @@ private function hCompileStage2Module( byval module as FBCIOFILE ptr ) as intege
 		end select
 
 		if( fbGetOption( FB_COMPOPT_TARGET ) <> FB_COMPTARGET_JS ) then
-			'' GCC doesn't recognize the -march option and PowerPC combination and recommendeds
-			'' the -mcpu option be used for PowerPC.
-			if( (fbGetCpuFamily( ) = FB_CPUFAMILY_PPC) orelse (fbGetCpuFamily( ) = FB_CPUFAMILY_PPC64) orelse (fbGetCpuFamily( ) = FB_CPUFAMILY_PPC64LE) ) then
+			'' GCC doesn't recognize the -march option and PowerPC combination
+			'' and recommendeds the -mcpu option be used for PowerPC.
+			select case fbGetCpuFamily( )
+			case FB_CPUFAMILY_PPC, FB_CPUFAMILY_PPC64, FB_CPUFAMILY_PPC64LE
 				if( fbc.cputype_is_native ) then
 					ln += "-mcpu=native "
 				else
 					ln += "-mcpu=" + *fbGetGccArch( ) + " "
 				end if
-			else
+			case else
 				if( fbc.cputype_is_native ) then
 					ln += "-march=native "
 				else
 					ln += "-march=" + *fbGetGccArch( ) + " "
 				end if
-			end if
+			end select
+		end if
+
+		if( (fbGetOption( FB_COMPOPT_TARGET ) = FB_COMPTARGET_ANDROID) and _
+		    (fbGetOption( FB_COMPOPT_CPUTYPE ) = FB_CPUTYPE_ARMV7A) ) then
+			'' The following options enforce the androideabi-v7a ABI
+			'' From https://developer.android.com/ndk/guides/standalone_toolchain.html
+			ln += "-mfloat-abi=softfp -mfpu=vfpv3-d16 "
 		end if
 
 		if( fbGetOption( FB_COMPOPT_PIC ) ) then
@@ -3435,19 +3672,36 @@ private function hCompileStage2Module( byval module as FBCIOFILE ptr ) as intege
 		end if
 
 		if( fbGetOption( FB_COMPOPT_TARGET ) <> FB_COMPTARGET_JS ) then
-			ln += "-S -nostdlib -nostdinc -Wall "
+
+			'' Even though clang's assembly output is syntax compatible with gnu-as,
+			'' clang may produce extra directives not understood by gnu-as
+			if( fbGetOption( FB_COMPOPT_BACKEND ) = FB_BACKEND_CLANG ) then
+				ln += "-fno-integrated-as "
+			end if
+
+			'' generate assembly
+			ln += "-S "
+
+			'' don't use any standard libraries or includes
+			ln += "-nostdlib -nostdinc "
+
+			'' enable all warnings
+			ln += "-Wall "
 
 			'' -Wno-unused-but-set-variable and the warning it suppresses were introduced
 			'' in GCC 4.6. Don't pass that flag to avoid an error on earlier GCC. As a
 			'' result, to disable the warning on 4.6+ need to disable all unused warnings...
-			' ln += "-Wno-unused-label -Wno-unused-function -Wno-unused-variable "
-			' ln += "-Wno-unused-but-set-variable "
+			'' ln += "-Wno-unused-label -Wno-unused-function -Wno-unused-variable "
+			'' ln += "-Wno-unused-but-set-variable "
 			ln += "-Wno-unused "
+
 		else
-			'if Emscripten is used, we will skip the assembly generation and compile directly to object code
+			'' if Emscripten is used, we will skip the assembly generation and
+			'' compile directly to object code
 			ln += "-c -nostdlib -nostdinc -Wall -Wno-unused-label " + _
 				"-Wno-unused-function -Wno-unused-variable "
 			ln += "-Wno-warn-absolute-paths "
+
 		end if
 
 		'' Don't warn about non-standard main() signature
@@ -3462,8 +3716,18 @@ private function hCompileStage2Module( byval module as FBCIOFILE ptr ) as intege
 		'' Do not let gcc make assumptions about pointers; FB isn't strict about it.
 		ln += "-fno-strict-aliasing "
 
+		'' Ignore .ident directives on win32 targets to prevent identification strings
+		'' from accumulating in the final binary (each .ident string from every object
+		'' module is added to the final binary even when strings are identical).
+		select case as const( fbGetOption( FB_COMPOPT_TARGET ) )
+		case FB_COMPTARGET_WIN32
+			ln += "-fno-ident "
+		end select
+
 		'' The rtlib sets its own rounding mode, don't let gcc make assumptions.
-		if( fbGetOption( FB_COMPOPT_TARGET ) <> FB_COMPTARGET_JS ) then
+		'' (Should this be skipped for ARM rather than Android?)
+		if( fbGetOption( FB_COMPOPT_TARGET ) <> FB_COMPTARGET_JS andalso _
+		    fbGetOption( FB_COMPOPT_TARGET ) <> FB_COMPTARGET_ANDROID ) then
 			ln += "-frounding-math "
 		end if
 
@@ -3503,8 +3767,21 @@ private function hCompileStage2Module( byval module as FBCIOFILE ptr ) as intege
 			ln += "-g "
 		end if
 
+		if( fbGetOption( FB_COMPOPT_PROFILE ) ) then
+			ln += "-pg "
+		end if
+
 		if( fbGetOption( FB_COMPOPT_FPUTYPE ) = FB_FPUTYPE_SSE ) then
-			ln += "-mfpmath=sse -msse2 "
+			if( fbGetOption( FB_COMPOPT_TARGET ) = FB_COMPTARGET_ANDROID ) then
+				'' Guaranteed to be present
+				ln += "-mfpmath=sse -mssse3 "
+			else
+				ln += "-mfpmath=sse -msse2 "
+			end if
+		elseif( fbGetOption( FB_COMPOPT_FPUTYPE ) = FB_FPUTYPE_NEON ) then
+			'' NEON is not IEEE 754-compliant (except in armv8+), so
+			'' gcc will not use it without this.
+			ln += "-mfpu=neon -funsafe-math-optimizations "
 		end if
 
 		select case( fbGetCpuFamily( ) )
@@ -3583,15 +3860,21 @@ private function hCompileStage2Module( byval module as FBCIOFILE ptr ) as intege
 	ln += "-o """ + asmfile + """"
 	ln += fbc.extopt.gcc
 
+	dim as FBCTOOL ccompiler = FBCTOOL_NONE
+
 	select case( fbGetOption( FB_COMPOPT_BACKEND ) )
 	case FB_BACKEND_GCC
-		var gcc = FBCTOOL_GCC
+		ccompiler = FBCTOOL_GCC
 		if( fbGetOption( FB_COMPOPT_TARGET ) = FB_COMPTARGET_JS ) then
-			gcc = FBCTOOL_EMCC
+			ccompiler = FBCTOOL_EMCC
 		end if
-		function = fbcRunBin( "compiling C", gcc, ln )
+		function = fbcRunBin( "compiling C", ccompiler, ln )
+	case FB_BACKEND_CLANG
+		ccompiler = FBCTOOL_CLANG
+		function = fbcRunBin( "compiling C", ccompiler, ln )
 	case FB_BACKEND_LLVM
-		function = fbcRunBin( "compiling LLVM IR", FBCTOOL_LLC, ln )
+		ccompiler = FBCTOOL_LLC
+		function = fbcRunBin( "compiling LLVM IR", ccompiler, ln )
 	end select
 end function
 
@@ -3608,45 +3891,68 @@ end sub
 private function hAssembleModule( byval module as FBCIOFILE ptr ) as integer
 	dim as string ln
 
-	select case( fbGetCpuFamily( ) )
-	case FB_CPUFAMILY_X86
-		if (fbGetOption( FB_COMPOPT_TARGET ) = FB_COMPTARGET_DARWIN) then
-			ln += "-arch i386 "
-		else
-			ln += "--32 "
-		endif
-	case FB_CPUFAMILY_X86_64
-		if (fbGetOption( FB_COMPOPT_TARGET ) = FB_COMPTARGET_DARWIN) then
-			ln += "-arch x86_64 "
-		else
-			ln += "--64 "
-		endif
-	end select
+	dim as FBCTOOL assembler = FBCTOOL_NONE
 
-	if( fbGetOption( FB_COMPOPT_DEBUGINFO ) = FALSE ) then
-		if (fbGetOption( FB_COMPOPT_TARGET ) <> FB_COMPTARGET_DARWIN) then
-			if( fbGetOption( FB_COMPOPT_TARGET ) <> FB_COMPTARGET_JS ) then
-				ln += "--strip-local-absolute "
-			end if
-		endif
+#ifdef ENABLE_STANDALONE
+	if( assembler = FBCTOOL_NONE ) then
+		if( fbGetOption( FB_COMPOPT_BACKEND ) = FB_BACKEND_CLANG ) then
+			assembler = FBCTOOL_CLANG
+		end if
+	end if
+#endif
+
+	if( assembler = FBCTOOL_NONE ) then
+		select case fbGetOption( FB_COMPOPT_TARGET )
+		case FB_COMPTARGET_JS
+			'' We will skip assemble stage, since it is
+			'' already performed by Emscripten
+			'' to re-enable assembly, change to FBCTOOL_EMAS
+			assembler = FBCTOOL_NONE
+		case else
+			assembler = FBCTOOL_AS
+		end select
 	end if
 
-	if( fbGetOption( FB_COMPOPT_TARGET ) = FB_COMPTARGET_JS ) then
-		'' We will skip assemble stage, since it is already performed by Emscripten
+	'' Still no assembler selected? Then we are skipping the assembly
+	'' and letting the ccompiler generate the object file directly
+	if( assembler = FBCTOOL_NONE ) then
 		function = TRUE
 		exit function
 	end if
+
+	select case assembler
+	case FBCTOOL_CLANG
+		ln += "-c "
+	case else
+		select case( fbGetCpuFamily( ) )
+		case FB_CPUFAMILY_X86
+			if (fbGetOption( FB_COMPOPT_TARGET ) = FB_COMPTARGET_DARWIN) then
+				ln += "-arch i386 "
+			else
+				ln += "--32 "
+			endif
+		case FB_CPUFAMILY_X86_64
+			if (fbGetOption( FB_COMPOPT_TARGET ) = FB_COMPTARGET_DARWIN) then
+				ln += "-arch x86_64 "
+			else
+				ln += "--64 "
+			endif
+		end select
+
+		if( fbGetOption( FB_COMPOPT_DEBUGINFO ) = FALSE ) then
+			if (fbGetOption( FB_COMPOPT_TARGET ) <> FB_COMPTARGET_DARWIN) then
+				if( fbGetOption( FB_COMPOPT_TARGET ) <> FB_COMPTARGET_JS ) then
+					ln += "--strip-local-absolute "
+				end if
+			endif
+		end if
+	end select
 
 	ln += """" + hGetAsmName( module, 2 ) + """ "
 	ln += "-o """ + *module->objfile + """"
 	ln += fbc.extopt.gas
 
-	var gas = FBCTOOL_AS
-	if( fbGetOption( FB_COMPOPT_TARGET ) = FB_COMPTARGET_JS ) then
-		gas = FBCTOOL_EMAS
-	end if
-
-	if( fbcRunBin( "assembling", gas, ln ) = FALSE ) then
+	if( fbcRunBin( "assembling", assembler, ln ) = FALSE ) then
 		exit function
 	end if
 
@@ -3833,7 +4139,12 @@ private sub hSetDefaultLibPaths( )
 	'' Add gcc's private lib directory, to find libgcc
 	'' This is for installing into Unix-like systems, and not for
 	'' standalone, which has libgcc in the main lib/.
-	if( fbGetOption( FB_COMPOPT_TARGET ) <> FB_COMPTARGET_JS ) then
+	select case fbGetOption( FB_COMPOPT_TARGET )
+	case FB_COMPTARGET_ANDROID
+		'' We don't pass -lgcc to ld (it's probably not called libgcc)
+	case FB_COMPTARGET_JS
+		'' We let emcc handle linking
+	case else
 		fbcAddLibPathFor( "libgcc.a" )
 
 		#ifndef DISABLE_STDCXX_PATH
@@ -3849,7 +4160,7 @@ private sub hSetDefaultLibPaths( )
 				fbcAddLibPathFor( "libstdc++.so" )
 			end select
 		#endif
-	end if
+	end select
 
 	select case( fbGetOption( FB_COMPOPT_TARGET ) )
 	case FB_COMPTARGET_DOS
@@ -3922,6 +4233,9 @@ private sub hAddDefaultLibs( )
 				fbcAddDefLib( "Xrandr" )
 				fbcAddDefLib( "Xrender" )
 			#endif
+
+		case FB_COMPTARGET_ANDROID
+			errReportEx( FB_ERRMSG_GFXLIBNOTSUPPORTEDFORTARGET, "", -1 )
 
 		end select
 	end if
@@ -4014,6 +4328,14 @@ private sub hAddDefaultLibs( )
 		fbcAddDefLib( "m" )
 		fbcAddDefLib( "ncurses" )
 
+	case FB_COMPTARGET_ANDROID
+		fbcAddDefLib( "m" )
+		fbcAddDefLib( "dl" )
+		fbcAddDefLib( "c" )
+		'' On Android we don't even know what the runtime support library
+		'' is called (it won't be libgcc when compiling with clang, unlike
+		'' on Linux); we query gcc/clang for it later in hLinkFiles.
+
 	case FB_COMPTARGET_WIN32
 		fbcAddDefLib( "gcc" )
 		fbcAddDefLib( "msvcrt" )
@@ -4058,7 +4380,12 @@ private sub hExcludeLibsFromLink( )
 	'' Remove any excluded libs from fbc.finallibs list
 	dim as TSTRSETITEM ptr i = listGetHead(@fbc.excludedlibs.list)
 	while i
-		strsetDel(@fbc.finallibs, i->s)
+		select case i->s
+		case "fbrt0.o", "fbrt0pic.o"
+			fbc.nofbrt0 = TRUE
+		case else
+			strsetDel(@fbc.finallibs, i->s)
+		end select
 		i = listGetNext(i)
 	wend
 end sub
@@ -4097,7 +4424,7 @@ private sub hPrintOptions( byval verbose as integer )
 	print "  -elocation       Enable error location reporting"
 	print "  -enullptr        Enable null-pointer checking"
 	print "  -eunwind         Enable call stack unwind information"
-	print "  -entry           Change the entry point of the program from main()"
+	print "  -entry <name>    Change the entry point of the program from main()"
 	end if
 
 	print "  -ex              -e plus RESUME support"
@@ -4109,7 +4436,7 @@ private sub hPrintOptions( byval verbose as integer )
 	print "  -forcelang <name>  Override #lang statements in source code"
 	if( verbose ) then
 	print "  -fpmode fast|precise  Select floating-point math accuracy/speed"
-	print "  -fpu x87|sse     Set target FPU"
+	print "  -fpu x87|sse|neon  Set target FPU"
 	end if
 	print "  -g               Add debug info, enable __FB_DEBUG__, and enable assert()"
 
@@ -4118,8 +4445,9 @@ private sub hPrintOptions( byval verbose as integer )
 	print "  -gen gas64       Select GNU gas 64-bit assembler backend"
 	print "  -gen gcc         Select GNU gcc C backend"
 	print "  -gen llvm        Select LLVM backend"
+	print "  -gen clang       Select clang C backend"
 	else
-	print "  -gen gas|gas64|gcc|llvm  Select code generation backend"
+	print "  -gen <backend>   Select code generation backend (gas|gas64|gcc|llvm|clang)"
 	end if
 
 	print "  [-]-help         Show this help output; use '-help -v' to show verbose help"
@@ -4147,6 +4475,7 @@ private sub hPrintOptions( byval verbose as integer )
 	print "  -print fblibdir  Display the compiler's lib/ path"
 	print "  -print x         Display output binary/library file name (if known)"
 	if( verbose ) then
+	print "  -print fork-id   Display compiler's fork identifier (if set)"
 	print "  -print sha-1     Display compiler's source code commit sha-1 (if known)"
 	end if
 	print "  -profile         Enable function profiling"
@@ -4158,6 +4487,7 @@ private sub hPrintOptions( byval verbose as integer )
 	print "  -showincludes    Display a tree of file names of #included files"
 	print "  -static          Prefer static libraries over dynamic ones when linking"
 	print "  -strip           Omit all symbol information from the output file"
+	print "  -sysroot <path>  Linker sysroot, needed by some cross-compiling toolchains"
 	print "  -t <value>       Set .exe stack size in kbytes, default: 1024 (win32/dos)"
 	if( verbose ) then
 	'' !!!TODO!!! provide more examples of available targets
@@ -4188,13 +4518,16 @@ private sub hPrintOptions( byval verbose as integer )
 	print "  -x <file>        Set output executable/library file name"
 
 	if( verbose ) then
+	print "  -z fbrt          Link with 'fbrt' instead of 'fb' runtime library"
 	print "  -z gosub-setjmp  Use setjmp/longjmp to implement GOSUB"
-	print "  -z valist-as-ptr Use pointer expressions to implement CVA_*() macros"
 	print "  -z no-thiscall   Don't use '__thiscall' calling convention"
 	print "  -z no-fastcall   Don't use '__fastcall' calling convention"
-	print "  -z fbrt          Link with 'fbrt' instead of 'fb' runtime library"
+	print "  -z nobuiltins    Disable all non-required builtin procedure definitions"
 	print "  -z nocmdline     Disable #cmdline source directives"
 	print "  -z retinflts     Enable returning some types in floating point registers"
+	print "  -z valist-as-ptr Use pointer expressions to implement CVA_*() macros"
+	else
+	print "  -z <option>      Extended options (see fbc -help -v)"
 	end if
 
 end sub
@@ -4211,7 +4544,7 @@ private sub hPrintVersion( byval verbose as integer )
 
 	print "FreeBASIC Compiler - Version " + FB_VERSION + _
 		" (" + FB_BUILD_DATE_ISO + "), built for " + fbGetHostId( ) + " (" & fbGetHostBits( ) & "bit)"
-	print "Copyright (C) 2004-2023 The FreeBASIC development team."
+	print "Copyright (C) 2004-2024 The FreeBASIC development team."
 
 	#ifdef ENABLE_STANDALONE
 		hAppendConfigInfo( config, "standalone" )
@@ -4229,6 +4562,9 @@ private sub hPrintVersion( byval verbose as integer )
 		fbcPrintTargetInfo( )
 		if( FB_BUILD_SHA1 > "" ) then
 			print "source sha-1: " & FB_BUILD_SHA1
+		end if
+		if( FB_BUILD_FORK_ID > "" ) then
+			print "fbc fork id:  " & FB_BUILD_FORK_ID
 		end if
 	end if
 end sub
@@ -4298,6 +4634,8 @@ end sub
 				print fbc.libpath
 			case PRINT_SHA1
 				print FB_BUILD_SHA1
+			case PRINT_FORK_ID
+				print FB_BUILD_FORK_ID
 			end select
 			fbcEnd( 0 )
 		end if

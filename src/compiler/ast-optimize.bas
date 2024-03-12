@@ -1704,7 +1704,7 @@ private function hOptStrAssignment _
 		case AST_NODECLASS_DEREF
 			'' check if we can optimize to fb_StrConcatByref()
 			'' - look specifically for a = a + b where both a & b are STRINGS where we
-			''   won't necessarily know until run time if a & b could be the same descriptorknow until run time if a and b could be the same descriptor.
+			''   won't necessarily know until run time if a & b could be the same descriptor
 			'' - but don't optimize a = a + a since we must make a copy anyway
 			''
 			''
@@ -1760,8 +1760,18 @@ private function hOptStrAssignment _
 			end if
 		end if
 	else
+		'' !!!TODO!!! - fixed length string can be optimized this
+		'' this way with multiple concatassign, so just disable
+		'' for now.  Maybe could optimize with a different
+		'' concatassign just for fixed length strings - TODO
+		select case astGetDataType( l )
+		case FB_DATATYPE_FIXSTR
+		case else
+			optimize = hIsMultStrConcat( l, r )
+		end select 
+
 		'' convert "a = b + c + d" to "a = b: a += c: a += d"
-		if( hIsMultStrConcat( l, r ) ) then
+		if( optimize ) then
 			function = hOptStrMultConcat( NULL, l, r, is_wstr )
 		else
 			''  =            f() -- assign

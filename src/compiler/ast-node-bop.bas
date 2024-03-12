@@ -23,9 +23,9 @@ private function hStrLiteralConcat _
 	ls = astGetSymbol( l )
 	rs = astGetSymbol( r )
 
-	'' new len = both strings' len less the 2 null-chars
+	'' new len = both strings - symbGetStrLength() handles the null terminator chars
 	s = symbAllocStrConst( *symbGetVarLitText( ls ) + *symbGetVarLitText( rs ), _
-						   symbGetStrLen( ls ) - 1 + symbGetStrLen( rs ) - 1 )
+	                       symbGetStrLength( ls ) + symbGetStrLength( rs ) )
 
 	function = astNewVAR( s )
 
@@ -49,15 +49,15 @@ private function hWstrLiteralConcat _
 	if( symbGetType( ls ) <> FB_DATATYPE_WCHAR ) then
 		'' new len = both strings' len less the 2 null-chars
 		s = symbAllocWstrConst( wstr( *symbGetVarLitText( ls ) ) + *symbGetVarLitTextW( rs ), _
-		                        symbGetStrLen( ls ) - 1 + symbGetWstrLen( rs ) - 1 )
+		                        symbGetStrLength( ls ) + symbGetWstrLength( rs ) )
 
 	elseif( symbGetType( rs ) <> FB_DATATYPE_WCHAR ) then
 		s = symbAllocWstrConst( *symbGetVarLitTextW( ls ) + wstr( *symbGetVarLitText( rs ) ), _
-		                        symbGetWstrLen( ls ) - 1 + symbGetStrLen( rs ) - 1 )
+		                        symbGetWstrLength( ls ) + symbGetStrLength( rs ) )
 
 	else
 		s = symbAllocWstrConst( *symbGetVarLitTextW( ls ) + *symbGetVarLitTextW( rs ), _
-		                        symbGetWstrLen( ls ) - 1 + symbGetWstrLen( rs ) - 1 )
+		                        symbGetWstrLength( ls ) + symbGetWstrLength( rs ) )
 	end if
 
 	function = astNewVAR( s )
@@ -653,7 +653,7 @@ private function hCheckDerefWcharPtr _
 	ll = l->l
 	if( ll ) then
 		if( ll->class = AST_NODECLASS_VAR ) then
-			if( symbGetIsWstring( ll->sym ) ) then
+			if( symbGetIsTemporary( ll->sym ) ) then
 				exit function
 			end if
 		end if
@@ -1183,7 +1183,7 @@ function astNewBOP _
 
 	if( (ldtype <> rdtype) or (l->subtype <> r->subtype) ) then
 		'' Pointer arithmetic (but not handled above by hDoPointerArith())?
-		'' (assuming hCheckPointers() checks were already done)
+		'' (assuming hCheckPtr() checks were already done)
 		if( (typeIsPtr( ldtype ) or typeIsPtr( rdtype )) and _
 		    ((op = AST_OP_ADD) or (op = AST_OP_SUB)) ) then
 			'' The result is supposed to be the pointer type
@@ -1561,7 +1561,7 @@ function astNewBOP _
 
 		'' For ANDALSO/ORELSE, "ex" is the dtorlist cookie
 
-		assert( (dtype = FB_DATATYPE_BOOLEAN) or (dtype = FB_DATATYPE_INTEGER) )
+		assert( (typeGetDtAndPtrOnly(dtype) = FB_DATATYPE_BOOLEAN) or (typeGetDtAndPtrOnly(dtype) = FB_DATATYPE_INTEGER) )
 
 		if ldclass = FB_DATACLASS_FPOINT then
 			cmp_constl = astNewConstf(0.0, FB_DATATYPE_SINGLE)
@@ -1597,9 +1597,10 @@ function astNewBOP _
 	n->op.op = op
 
 	'' always alloc the result VR for the C backend
-	if( env.clopt.backend = FB_BACKEND_GCC ) then
+	select case env.clopt.backend
+	case FB_BACKEND_GCC, FB_BACKEND_CLANG
 		options or= AST_OPOPT_ALLOCRES
-	end if
+	end select
 
 	n->op.options = options
 

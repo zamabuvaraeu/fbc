@@ -1,6 +1,6 @@
 
     FreeBASIC - A multi-platform BASIC Compiler
-    Copyright (C) 2004-2023 The FreeBASIC development team.
+    Copyright (C) 2004-2024 The FreeBASIC development team.
 
     Official site:      https://freebasic.net/
     Forum:              https://freebasic.net/forum/
@@ -310,8 +310,8 @@
         him.
     - VonGodric
         Author of the first FreeBASIC IDE: FBIDE.
-    - Everybody that helped writing the documentation (and in special Nexinarus 
+    - Everybody that helped writing the documentation (and in special Nexinarus
       who started it)
         https://freebasic.net/wiki/ContributorList
-    - All users that reported bugs, requested features and as such helped 
+    - All users that reported bugs, requested features and as such helped
       improving the compiler, language and run-time libraries.

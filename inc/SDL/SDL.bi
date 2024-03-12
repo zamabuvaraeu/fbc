@@ -22,7 +22,7 @@
 ''   slouken@libsdl.org
 ''
 '' translated to FreeBASIC by:
-''   Copyright © 2020 FreeBASIC development team
+''   FreeBASIC development team
 
 #pragma once
 
@@ -1546,11 +1546,6 @@ declare sub SDL_QuitSubSystem(byval flags as Uint32)
 declare function SDL_WasInit(byval flags as Uint32) as Uint32
 declare sub SDL_Quit()
 #define _SDL_syswm_h
-
-#ifdef __FB_DARWIN__
-	#define Cursor X11Cursor
-	#undef Cursor
-#endif
 
 #ifdef __FB_UNIX__
 	type SDL_SYSWM_TYPE as long
