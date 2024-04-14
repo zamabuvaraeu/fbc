@@ -1043,7 +1043,10 @@ private function hsymbLookupTypeNS _
 		sym = hashLookupEx( @hashtb->tb, id, index )
 		while( sym )
 			if( symbIsLocal( sym ) ) then
-				return symbNewChainpool( sym )
+				'' but only if it's not main scoped local
+				if( symbGetScope( sym ) > FB_MAINSCOPE ) then
+					return symbNewChainpool( sym )
+				end if
 			end if
 			sym = sym->hash.next
 		wend
@@ -1841,6 +1844,25 @@ function symbIsString _
 
 end function
 
+function symbGetStrLength( byval sym as FBSYMBOL ptr ) as longint
+	assert( symbIsString( symbGetType( sym ) ) )
+	select case as const symbGetType( sym )
+	case FB_DATATYPE_CHAR
+		function = (sym)->lgt - 1
+	case FB_DATATYPE_WCHAR
+		function = ((sym)->lgt \ typeGetSize( FB_DATATYPE_WCHAR )) - 1
+	case FB_DATATYPE_STRING
+		function = (sym)->lgt
+	case FB_DATATYPE_FIXSTR
+		function = (sym)->lgt
+	end select
+end function
+
+function symbGetWstrLength( byval sym as FBSYMBOL ptr ) as longint
+	assert( symbGetType( sym ) = FB_DATATYPE_WCHAR )
+	function = ((sym)->lgt \ typeGetSize( FB_DATATYPE_WCHAR )) - 1
+end function
+
 '':::::
 function symbGetValistType _
 	( _
@@ -1930,11 +1952,6 @@ function symbTypeToStr _
 		s += *symb_dtypeTB(dtypeonly).name
 		if( is_fixlenstr or (length <> symb_dtypeTB(dtypeonly).size) ) then
 			select case( dtypeonly )
-			case FB_DATATYPE_FIXSTR
-				'' For STRING*N the null terminator is
-				'' implicitly added, the length actually is N+1,
-				'' unlike Z/WSTRING*N where N includes it.
-				length -= 1
 			case FB_DATATYPE_WCHAR
 				'' Convert bytes back to chars
 				length \= typeGetSize( FB_DATATYPE_WCHAR )
@@ -2597,7 +2614,7 @@ private function hGetNamespacePrefix( byval sym as FBSYMBOL ptr ) as string
 	function = s
 end function
 
-#if __FB_DEBUG__
+#if (__FB_DEBUG__ <> 0) orelse defined(__GAS64_DEBUG__)
 static shared as zstring ptr classnames(FB_SYMBCLASS_VAR to FB_SYMBCLASS_NSIMPORT) = _
 { _
 	@"var"      , _
@@ -2909,7 +2926,7 @@ function symbDumpToStr _
 	elseif( symbIsProc( sym ) ) then
 		checkStat( PROCEMITTED )
 	else
-		checkStat( WSTRING )
+		checkStat( TEMPORARY )
 	end if
 
 	checkStat( EMITTED )

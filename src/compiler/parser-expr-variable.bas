@@ -108,7 +108,7 @@ private function cFixedSizeArrayIndex( byval sym as FBSYMBOL ptr ) as ASTNODE pt
 	end if
 
 	'' times length
-	expr = astNewBOP( AST_OP_MUL, expr, astNewCONSTi( symbGetLen( sym ) ) )
+	expr = astNewBOP( AST_OP_MUL, expr, astNewCONSTi( symbGetSizeOf( sym ) ) )
 
 	function = expr
 end function
@@ -167,13 +167,17 @@ private function hFieldAccess _
 			return astNewNIDXARRAY( hBuildField( varexpr, offsetexpr, fld, dtype, subtype ) )
 		end if
 
-		'' '()'?
-		if( lexGetLookAhead( 1 ) = CHAR_RPRNT ) then
-			return hBuildField( varexpr, offsetexpr, fld, dtype, subtype )
-		end if
-
 		'' '('
 		lexSkipToken( )
+
+		'' ')'?
+		if( lexGetToken() = CHAR_RPRNT ) then
+
+			'' ')'
+			lexSkipToken( )
+
+			return astNewNIDXARRAY( hBuildField( varexpr, offsetexpr, fld, dtype, subtype ) )
+		end if
 
 		if( symbIsDynamic( fld ) ) then
 			'' Dynamic array field; access the descriptor field (same offset)
@@ -442,7 +446,7 @@ sub cUdtTypeMember _
 				subtype = symbGetSubType( sym )
 			end if
 
-			lgt = symbGetLen( sym )
+			lgt = symbGetSizeOf( sym )
 			is_fixlenstr = symbGetIsFixLenStr( sym )
 
 			'' const string? get the size from the constant string value
@@ -450,7 +454,7 @@ sub cUdtTypeMember _
 				select case( typeGetDtAndPtrOnly( dtype ) )
 				case FB_DATATYPE_WCHAR, FB_DATATYPE_CHAR, FB_DATATYPE_STRING, FB_DATATYPE_FIXSTR
 					is_fixlenstr = TRUE
-					lgt = symbGetLen( symbGetConstStr( sym ) )
+					lgt = symbGetSizeOf( symbGetConstStr( sym ) )
 					exit while
 				end select
 			end if
@@ -698,6 +702,12 @@ function cMemberDeref _
 				if( lexGetToken( ) = CHAR_DOT ) then
 					lexSkipToken( LEXCHECK_NOPERIOD )
 
+					'' member access on overloaded []'s return type must be UDT
+					if( astGetDataType( varexpr ) <> FB_DATATYPE_STRUCT ) then
+						errReport( FB_ERRMSG_EXPECTEDUDT, TRUE )
+						exit function
+					end if
+
 					'' MemberAccess
 					varexpr = cMemberAccess( astGetFullType( varexpr ), _
 					                         astGetSubType( varexpr ), varexpr )
@@ -879,7 +889,7 @@ private function cDynamicArrayIndex _
 	expr = NULL
 	do
 		dimension += 1
-		dimoffset = symb.fbarray_dimtb + (dimension * symbGetLen( symb.fbarraydim ))
+		dimoffset = symb.fbarray_dimtb + (dimension * symbGetSizeOf( symb.fbarraydim ))
 
 		'' Expression
 		dimexpr = hCheckIntegerIndex( hIndexExpr( ) )
@@ -904,7 +914,7 @@ private function cDynamicArrayIndex _
 	loop while( hMatch( CHAR_COMMA ) )
 
 	'' times length
-	expr = astNewBOP( AST_OP_MUL, expr, astNewCONSTi( symbGetLen( sym ) ) )
+	expr = astNewBOP( AST_OP_MUL, expr, astNewCONSTi( symbGetSizeOf( sym ) ) )
 
 	'' No longer needed, all places using it should have cloned
 	astDelTree( descexpr )
@@ -1043,7 +1053,7 @@ function cVariableEx overload _
 	varexpr = NULL
 	idxexpr = NULL
 
-	dim as integer check_fields = TRUE, is_nidxarray = FALSE
+	dim as integer check_fields = TRUE, is_nidxarray = TRUE
 
 	'' check for '()', it's not an array, just passing bydesc
 	if( (lexGetToken( ) = CHAR_LPRNT) and (not fbGetIdxInParensOnly( )) ) then
@@ -1074,6 +1084,10 @@ function cVariableEx overload _
 					                     astBuildDerefAddrOf( descexpr, symb.fbarray_data, FB_DATATYPE_INTEGER, NULL ) )
 				else
 					idxexpr = cFixedSizeArrayIndex( sym )
+				end if
+
+				if( idxexpr ) then
+					is_nidxarray = FALSE
 				end if
 
 				'' ')'
@@ -1109,7 +1123,6 @@ function cVariableEx overload _
 				idxexpr = hMakeArrayIdx( sym )
 			else
 				check_fields = FALSE
-				is_nidxarray = TRUE
 			end if
 		end if
 	end if
@@ -1175,6 +1188,21 @@ function cVariableEx overload _
 	else
 		if( is_nidxarray ) then
 			varexpr = astNewNIDXARRAY( varexpr )
+
+			if( check_array ) then
+				''  and (not fbGetIdxInParensOnly( )) ) then
+				if( lexGetToken( ) = CHAR_LPRNT ) then
+					if( lexGetLookAhead( 1 ) <> CHAR_RPRNT ) then
+						errReport( FB_ERRMSG_EXPECTEDARRAY )
+					else
+						lexSkipToken()
+						lexSkipToken()
+					end if
+				else
+					errReport( FB_ERRMSG_EXPECTEDARRAY )
+				end if
+			end if
+
 		end if
 	end if
 
@@ -1396,18 +1424,18 @@ function cVarOrDeref _
 		byval options as FB_VAREXPROPT _
 	) as ASTNODE ptr
 
-	dim as integer last_isexpr = any, check_array = any
+	dim as integer last_isexpr = any, previous_check_array = any
 
 	if( options and FB_VAREXPROPT_ISEXPR ) then
 		last_isexpr = fbGetIsExpression( )
 		fbSetIsExpression( TRUE )
 	end if
-	check_array = fbGetCheckArray( )
+	previous_check_array = fbGetCheckArray( )
 	fbSetCheckArray( ((options and FB_VAREXPROPT_NOARRAYCHECK) = 0) )
 
 	dim as ASTNODE ptr expr = cHighestPrecExpr( NULL, NULL )
 
-	fbSetCheckArray( check_array )
+	fbSetCheckArray( previous_check_array )
 	if( options and FB_VAREXPROPT_ISEXPR ) then
 		fbSetIsExpression( last_isexpr )
 	end if

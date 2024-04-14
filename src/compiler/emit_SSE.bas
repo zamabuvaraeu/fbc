@@ -14,11 +14,14 @@
 #include once "emit-private.bi"
 
 dim shared _emitLOADB2F_x86 as sub( byval dvreg as IRVREG ptr, byval svreg as IRVREG ptr )
+dim shared _emitLOADF2B_x86 as sub( byval dvreg as IRVREG ptr, byval svreg as IRVREG ptr )
 
 private sub hULONG2DBL _
 	( _
 		byval svreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_UOPCB )
 
 	dim as string label, aux, ostr
 
@@ -42,6 +45,8 @@ end sub
 
 private sub _emitLOADB2F_SSE( byval dvreg as IRVREG ptr, byval svreg as IRVREG ptr )
 
+	ASSERT_PROC_DECL( EMIT_BOPCB )
+
 	dim as string dst
 	dim as integer ddsize = any
 
@@ -64,6 +69,54 @@ private sub _emitLOADB2F_SSE( byval dvreg as IRVREG ptr, byval svreg as IRVREG p
 
 end sub
 
+private sub hMoveSSEREGToFPUSTACK _
+	( _
+		byval dvreg as IRVREG ptr, _
+		byval svreg as IRVREG ptr _
+	)
+
+	dim as string src
+	dim as integer sdsize
+
+	'' use stack to move from SSE register to FPU STACK
+	'' This is just  to get some cbool(expression) stuff
+	'' working for the test-suite.  It should probably
+	'' have it's own implementation.
+
+	'' load SSE register and push to FPU STACK
+	sdsize = typeGetSize( svreg->dtype )
+	outp "sub esp" + COMMA + str( sdsize )
+
+	hPrepOperand( svreg, src )
+
+	if( sdsize > 4 ) then
+		outp "movlpd qword ptr [esp]" + COMMA + src
+		outp "fld qword ptr [esp]"
+	else
+		outp "movss dword ptr [esp]" + COMMA + src
+		outp "fld dword ptr [esp]"
+	end if
+
+	outp "add esp" + COMMA + str( sdsize )
+
+end sub
+
+private sub _emitLOADF2B_SSE( byval dvreg as IRVREG ptr, byval svreg as IRVREG ptr )
+
+	ASSERT_PROC_DECL( EMIT_BOPCB )
+
+	if( svreg->regFamily = IR_REG_SSE ) then
+		if( svreg->typ = IR_VREGTYPE_REG ) then
+			hMoveSSEREGToFPUSTACK( dvreg, svreg )
+		end if
+	end if
+
+	'' let x86 LOADF2B handle it from the FPU STACK to destine
+	_emitLOADF2B_x86( dvreg, svreg )
+
+end sub
+
+
 '':::::
 private sub _emitSTORF2L_SSE _
 	( _
@@ -71,37 +124,21 @@ private sub _emitSTORF2L_SSE _
 		byval svreg as IRVREG ptr _
 	) static
 
-	dim as string dst, src
-	dim as integer sdsize
+	ASSERT_PROC_DECL( EMIT_BOPCB )
+
+	dim as string dst
 
 	'' signed?
 	if( typeIsSigned( dvreg->dtype ) = 0) then exit sub
 
 	if( svreg->regFamily = IR_REG_SSE ) then
-
-		sdsize = typeGetSize( svreg->dtype )
-		outp "sub esp" + COMMA + str( sdsize )
-
-		hPrepOperand( svreg, src )
-
-		if( sdsize > 4 ) then
-			outp "movlpd qword ptr [esp]" + COMMA + src
-			outp "fld qword ptr [esp]"
-		else
-			outp "movss dword ptr [esp]" + COMMA + src
-			outp "fld dword ptr [esp]"
-		end if
-
-		outp "add esp" + COMMA + str( sdsize )
+		hMoveSSEREGToFPUSTACK( dvreg, svreg )
 	end if
 
 	hPrepOperand( dvreg, dst )
-
 	outp "fistp " + dst
 
 end sub
-
-
 
 '':::::
 private sub _emitSTORF2I_SSE _
@@ -109,6 +146,8 @@ private sub _emitSTORF2I_SSE _
 		byval dvreg as IRVREG ptr, _
 		byval svreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_BOPCB )
 
 	dim as string dst, src
 	dim as integer sdsize, ddsize
@@ -220,6 +259,8 @@ private sub _emitSTORL2F_SSE _
 		byval svreg as IRVREG ptr _
 	) static
 
+	ASSERT_PROC_DECL( EMIT_BOPCB )
+
 	dim as string dst, src, aux
 	dim as string ostr
 
@@ -273,15 +314,14 @@ private sub _emitSTORL2F_SSE _
 
 end sub
 
-
-
-
 '':::::
 private sub _emitSTORI2F_SSE _
 	( _
 		byval dvreg as IRVREG ptr, _
 		byval svreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_BOPCB )
 
 	dim as string dst, src, aux
 	dim as integer ddsize, sdsize, reg, isfree
@@ -344,12 +384,13 @@ private sub _emitSTORI2F_SSE _
 	end if
 end sub
 
-
 private sub hEmitStoreFreg2F_SSE _
 	( _
 		byval dvreg as IRVREG ptr, _
 		byval svreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_BOPCB )
 
 	dim as string dst, src
 	dim as integer ddsize
@@ -377,13 +418,14 @@ private sub hEmitStoreFreg2F_SSE _
 
 end sub
 
-
 '':::::
 private sub _emitSTORF2F_SSE _
 	( _
 		byval dvreg as IRVREG ptr, _
 		byval svreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_BOPCB )
 
 	dim as string dst, src
 	dim as integer ddsize, sdsize, src_vec
@@ -485,13 +527,14 @@ private sub _emitSTORF2F_SSE _
 end sub
 
 
-
 '':::::
 private sub _emitLOADF2L_SSE _
 	( _
 		byval dvreg as IRVREG ptr, _
 		byval svreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_BOPCB )
 
 	dim as string dst, src, aux
 	dim as string ostr
@@ -552,13 +595,14 @@ private sub _emitLOADF2L_SSE _
 end sub
 
 
-
 '':::::
 private sub _emitLOADF2I_SSE _
 	( _
 		byval dvreg as IRVREG ptr, _
 		byval svreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_BOPCB )
 
 	dim as string dst, src, suffix
 	dim as string aux, aux8_16
@@ -660,14 +704,14 @@ private sub _emitLOADF2I_SSE _
 	end if
 end sub
 
-
-
 '':::::
 private sub _emitLOADL2F_SSE _
 	( _
 		byval dvreg as IRVREG ptr, _
 		byval svreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_BOPCB )
 
 	dim as string dst, src, aux
 	dim as string ostr
@@ -734,13 +778,14 @@ private sub _emitLOADL2F_SSE _
 end sub
 
 
-
 '':::::
 private sub _emitLOADI2F_SSE _
 	( _
 		byval dvreg as IRVREG ptr, _
 		byval svreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_BOPCB )
 
 	dim as string dst, src
 	dim as integer sdsize, ddsize
@@ -847,13 +892,14 @@ private sub _emitLOADI2F_SSE _
 end sub
 
 
-
 '':::::
 private sub _emitLOADF2F_SSE _
 	( _
 		byval dvreg as IRVREG ptr, _
 		byval svreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_BOPCB )
 
 	dim as string src, dst
 	dim as integer sdsize, ddsize
@@ -908,13 +954,14 @@ private sub _emitLOADF2F_SSE _
 	end if
 end sub
 
-
 '':::::
 private sub _emitMOVF_SSE _
 	( _
 		byval dvreg as IRVREG ptr, _
 		byval svreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_BOPCB )
 
 	dim as string dst, src
 	dim as integer sdsize, ddsize
@@ -945,14 +992,14 @@ private sub _emitMOVF_SSE _
 
 end sub
 
-
-
 '':::::
 '' replicate the scalar operand
 private sub _emitSWZREPF_SSE _
 	( _
 		byval dvreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_UOPCB )
 
 	dim as string dst
 	dim as integer ddsize
@@ -972,7 +1019,6 @@ private sub _emitSWZREPF_SSE _
 	end if
 
 end sub
-
 
 '':::::
 '' emit code to convert operands, if necessary. return TRUE if conversion occured
@@ -1017,14 +1063,14 @@ private function hEmitConvertOperands_SSE _
 
 end function
 
-
-
 '':::::
 private sub _emitADDF_SSE _
 	( _
 		byval dvreg as IRVREG ptr, _
 		byval svreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_BOPCB )
 
 	dim as string dst, src, ostr
 	dim As integer sdsize, ddsize, returnSize
@@ -1098,15 +1144,14 @@ private sub _emitADDF_SSE _
 	end if
 end sub
 
-
-
-
 '':::::
 private sub _emitSUBF_SSE _
 	( _
 		byval dvreg as IRVREG ptr, _
 		byval svreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_BOPCB )
 
 	dim as string dst, src, ostr
 	dim As integer sdsize, ddsize, returnSize
@@ -1179,14 +1224,14 @@ private sub _emitSUBF_SSE _
 	end if
 end sub
 
-
-
 '':::::
 private sub _emitMULF_SSE _
 	( _
 		byval dvreg as IRVREG ptr, _
 		byval svreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_BOPCB )
 
 	dim as string dst, src, ostr
 	dim As integer sdsize, ddsize, returnSize
@@ -1260,14 +1305,14 @@ private sub _emitMULF_SSE _
 
 end sub
 
-
-
 '':::::
 private sub _emitDIVF_SSE _
 	( _
 		byval dvreg as IRVREG ptr, _
 		byval svreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_BOPCB )
 
 	dim as string dst, src, ostr
 	dim As integer sdsize, ddsize, returnSize
@@ -1341,14 +1386,14 @@ private sub _emitDIVF_SSE _
 
 end sub
 
-
-
 '':::::
 private sub _emitATN2_SSE _
 	( _
 		byval dvreg as IRVREG ptr, _
 		byval svreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_BOPCB )
 
 	dim as string src, dst, ostr
 	dim as integer sdsize, ddsize
@@ -1410,6 +1455,8 @@ private sub _emitPOW_SSE _
 		byval dvreg as IRVREG ptr, _
 		byval svreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_BOPCB )
 
 	dim as string src, dst, ostr
 	dim as integer sdsize, ddsize
@@ -1479,19 +1526,80 @@ end sub
 '' relational
 ''::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
+private function hCMPF_get_recipe _
+	( _
+		byval op as CMPF_OP, _
+		byval options as IR_EMITOPT, _
+		byval label as FBSYMBOL ptr _
+	) as CMPF_RECIPE ptr
+
+	assert( op >= 0 and op <= CMPF_OP_COUNT )
+
+	'' These recipes work for x86 (non-SSE) comparisons too.
+	'' The difference is that we don't use any swapregs, it seems less
+	'' expensive to just do the parity flags check when needed.
+	'' msk Jcc & mask are just a carry over from x86, not used here.
+
+	static recipe( 0 to 23 ) as CMPF_RECIPE = _
+		{ _
+			/' op          x86    rev    msk                  parity parity swap   swap '/ _
+			/' op          Jcc    Jcc    Jcc    mask          false  true   regs   init '/ _
+			/' Result = ( a op b ) '/ _
+			( CMPF_OP_EQ, @"e" , @""  , @""  , @""          , FALSE, TRUE , FALSE, FALSE ), _
+			( CMPF_OP_NE, @"ne", @""  , @""  , @""          , TRUE , FALSE, FALSE, FALSE ), _
+			( CMPF_OP_GT, @"a" , @""  , @""  , @""          , FALSE, FALSE, FALSE, FALSE ), _
+			( CMPF_OP_LT, @"b" , @""  , @""  , @""          , FALSE ,TRUE , FALSE, FALSE ), _
+			( CMPF_OP_GE, @"ae", @""  , @""  , @""          , FALSE, FALSE, FALSE, FALSE ), _
+			( CMPF_OP_LE, @"be", @""  , @""  , @""          , FALSE, TRUE , FALSE, FALSE ), _
+			/' Result = !( a op b ) '/ _
+			( CMPF_OP_EQ, @"ne", @""  , @""  , @""          , TRUE , FALSE, FALSE, FALSE ), _
+			( CMPF_OP_NE, @"e" , @""  , @""  , @""          , FALSE, TRUE , FALSE, FALSE ), _
+			( CMPF_OP_GT, @"be", @""  , @""  , @""          , FALSE, FALSE, FALSE, FALSE ), _
+			( CMPF_OP_LT, @"ae", @""  , @""  , @""          , TRUE , FALSE, FALSE, FALSE ), _
+			( CMPF_OP_GE, @"b" , @""  , @""  , @""          , FALSE, FALSE, FALSE, FALSE ), _
+			( CMPF_OP_LE, @"a" , @""  , @""  , @""          , TRUE , FALSE, FALSE, FALSE ), _
+			/' if !( a op b ) then goto exit label '/ _
+			( CMPF_OP_EQ, @"e" , @""  , @""  , @""          , FALSE, TRUE , FALSE, FALSE ), _
+			( CMPF_OP_NE, @"ne", @""  , @""  , @""          , TRUE , FALSE, FALSE, FALSE ), _
+			( CMPF_OP_GT, @"a" , @""  , @""  , @""          , FALSE, FALSE, FALSE, FALSE ), _
+			( CMPF_OP_LT, @"b" , @""  , @""  , @""          , FALSE, TRUE , FALSE, FALSE ), _
+			( CMPF_OP_GE, @"ae", @""  , @""  , @""          , FALSE, FALSE, FALSE, FALSE ), _
+			( CMPF_OP_LE, @"be", @""  , @""  , @""          , FALSE, TRUE , FALSE, FALSE ), _
+			/' if ( a op b ) then goto exit label '/ _
+			( CMPF_OP_EQ, @"ne", @""  , @"nz", @"0b01000000", TRUE , FALSE, FALSE, FALSE ), _
+			( CMPF_OP_NE, @"e" , @""  , @"z" , @"0b01000000", FALSE, TRUE , FALSE, FALSE ), _
+			( CMPF_OP_GT, @"be", @""  , @"z" , @"0b01000001", FALSE, FALSE, FALSE, FALSE ), _
+			( CMPF_OP_LT, @"ae", @""  , @"nz", @"0b00000001", TRUE , FALSE, FALSE, FALSE ), _
+			( CMPF_OP_GE, @"b" , @""  , @""  , @""          , FALSE, FALSE, FALSE, FALSE ), _
+			( CMPF_OP_LE, @"a" , @""  , @"nz", @"0b01000001", TRUE , FALSE, FALSE, FALSE ) _
+		}
+
+	dim index as integer = op
+	if( label ) then
+		index += 12
+	end if
+	if( (options and IR_EMITOPT_REL_DOINVERSE) <> 0 ) then
+		index += 6
+	end if
+
+	return @recipe(index)
+end function
+
 private sub hCMPF_SSE _
 	( _
 		byval rvreg as IRVREG ptr, _
 		byval label as FBSYMBOL ptr, _
-		byval mnemonic as zstring ptr, _
-		byval mask as zstring ptr, _
 		byval dvreg as IRVREG ptr, _
-		byval svreg as IRVREG ptr _
+		byval svreg as IRVREG ptr, _
+		byval recipe as CMPF_RECIPE ptr _
 	) static
 
-	dim as string rname, rname8, dst, src, ostr, lname
+	dim as string rname, rname8, dst, src, ostr, lname, isnanlabel
 	dim as integer iseaxfree, isedxfree
 	dim as integer sdsize, ddsize, returnSize
+
+	'' no implementation for swapping registers
+	assert( recipe->swapregs = FALSE )
 
 	ddsize = typeGetSize( dvreg->dtype )
 	sdsize = typeGetSize( svreg->dtype )
@@ -1550,64 +1658,14 @@ private sub hCMPF_SSE _
 
 	'' no result to be set? just branch
 	if( rvreg = NULL ) then
-		ostr = "j" + *mnemonic
-			hBRANCH( ostr, lname )
+		hCMPF_jxx( recipe, lname )
 		exit sub
 	end if
 
-	hPrepOperand( rvreg, rname )
-
-	'' can it be optimized?
-	if( env.clopt.cputype >= FB_CPUTYPE_486 ) then
-		rname8 = *hGetRegName( FB_DATATYPE_BYTE, rvreg->reg )
-
-		'' handle EDI and ESI
-		if( (rvreg->reg = EMIT_REG_ESI) or (rvreg->reg = EMIT_REG_EDI) ) then
-
-			isedxfree = hIsRegFree( FB_DATACLASS_INTEGER, EMIT_REG_EDX )
-			if( isedxfree = FALSE ) then
-				ostr = "xchg edx, " + rname
-				outp ostr
-			end if
-
-			ostr = "set" + *mnemonic + (TABCHAR + "dl")
-			outp ostr
-
-			if( isedxfree = FALSE ) then
-				ostr = "xchg edx, " + rname
-				outp ostr
-			else
-				hMOV rname, "edx"
-			end if
-		else
-			ostr = "set" + *mnemonic + " " + rname8
-			outp ostr
-		end if
-
-		'' convert 1 to -1 (TRUE in QB/FB)
-		ostr = "shr " + rname + ", 1"
-		outp ostr
-
-		ostr = "sbb " + rname + COMMA + rname
-		outp ostr
-	else
-		'' old (and slow) boolean set
-			ostr = "mov " + rname + ", -1"
-			outp ostr
-
-			ostr = "j" + *mnemonic
-			hBRANCH( ostr, lname )
-
-		ostr = "xor " + rname + COMMA + rname
-		outp ostr
-
-		hLabel( lname )
-	end if
+	'' set result
+	hCMPF_set( rvreg, recipe, lname )
 
 end sub
-
-
-
 
 '':::::
 private sub _emitCGTF_SSE _
@@ -1615,14 +1673,15 @@ private sub _emitCGTF_SSE _
 		byval rvreg as IRVREG ptr, _
 		byval label as FBSYMBOL ptr, _
 		byval dvreg as IRVREG ptr, _
-		byval svreg as IRVREG ptr _
+		byval svreg as IRVREG ptr, _
+		byval options as IR_EMITOPT _
 	) static
 
-	hCMPF_SSE( rvreg, label, "a", "", dvreg, svreg )
+	ASSERT_PROC_DECL( EMIT_RELCB )
+
+	hCMPF_SSE( rvreg, label, dvreg, svreg, hCMPF_get_recipe( CMPF_OP_GT, options, label ) )
 
 end sub
-
-
 
 '':::::
 private sub _emitCLTF_SSE _
@@ -1630,13 +1689,15 @@ private sub _emitCLTF_SSE _
 		byval rvreg as IRVREG ptr, _
 		byval label as FBSYMBOL ptr, _
 		byval dvreg as IRVREG ptr, _
-		byval svreg as IRVREG ptr _
+		byval svreg as IRVREG ptr, _
+		byval options as IR_EMITOPT _
 	) static
 
-	hCMPF_SSE( rvreg, label, "b", "", dvreg, svreg )
+	ASSERT_PROC_DECL( EMIT_RELCB )
+
+	hCMPF_SSE( rvreg, label, dvreg, svreg, hCMPF_get_recipe( CMPF_OP_LT, options, label ) )
 
 end sub
-
 
 '':::::
 private sub _emitCEQF_SSE _
@@ -1644,13 +1705,15 @@ private sub _emitCEQF_SSE _
 		byval rvreg as IRVREG ptr, _
 		byval label as FBSYMBOL ptr, _
 		byval dvreg as IRVREG ptr, _
-		byval svreg as IRVREG ptr _
+		byval svreg as IRVREG ptr, _
+		byval options as IR_EMITOPT _
 	) static
 
-	hCMPF_SSE( rvreg, label, "e", "", dvreg, svreg )
+	ASSERT_PROC_DECL( EMIT_RELCB )
+
+	hCMPF_SSE( rvreg, label, dvreg, svreg, hCMPF_get_recipe( CMPF_OP_EQ, options, label ) )
 
 end sub
-
 
 '':::::
 private sub _emitCNEF_SSE _
@@ -1658,13 +1721,15 @@ private sub _emitCNEF_SSE _
 		byval rvreg as IRVREG ptr, _
 		byval label as FBSYMBOL ptr, _
 		byval dvreg as IRVREG ptr, _
-		byval svreg as IRVREG ptr _
+		byval svreg as IRVREG ptr, _
+		byval options as IR_EMITOPT _
 	) static
 
-	hCMPF_SSE( rvreg, label, "ne", "", dvreg, svreg )
+	ASSERT_PROC_DECL( EMIT_RELCB )
+
+	hCMPF_SSE( rvreg, label, dvreg, svreg, hCMPF_get_recipe( CMPF_OP_NE, options, label ) )
 
 end sub
-
 
 '':::::
 private sub _emitCLEF_SSE _
@@ -1672,13 +1737,15 @@ private sub _emitCLEF_SSE _
 		byval rvreg as IRVREG ptr, _
 		byval label as FBSYMBOL ptr, _
 		byval dvreg as IRVREG ptr, _
-		byval svreg as IRVREG ptr _
+		byval svreg as IRVREG ptr, _
+		byval options as IR_EMITOPT _
 	) static
 
-	hCMPF_SSE( rvreg, label, "be", "", dvreg, svreg )
+	ASSERT_PROC_DECL( EMIT_RELCB )
+
+	hCMPF_SSE( rvreg, label, dvreg, svreg, hCMPF_get_recipe( CMPF_OP_LE, options, label ) )
 
 end sub
-
 
 '':::::
 private sub _emitCGEF_SSE _
@@ -1686,20 +1753,23 @@ private sub _emitCGEF_SSE _
 		byval rvreg as IRVREG ptr, _
 		byval label as FBSYMBOL ptr, _
 		byval dvreg as IRVREG ptr, _
-		byval svreg as IRVREG ptr _
+		byval svreg as IRVREG ptr, _
+		byval options as IR_EMITOPT _
 	) static
 
-	hCMPF_SSE( rvreg, label, "ae", "", dvreg, svreg )
+	ASSERT_PROC_DECL( EMIT_RELCB )
+
+	hCMPF_SSE( rvreg, label, dvreg, svreg, hCMPF_get_recipe( CMPF_OP_GE, options, label ) )
 
 end sub
-
-
 
 '':::::
 private sub _emitNEGF_SSE _
 	( _
 		byval dvreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_UOPCB )
 
 	dim as string dst, src
 	dim as integer ddsize
@@ -1740,12 +1810,13 @@ private sub _emitNEGF_SSE _
 
 end sub
 
-
 '':::::
 private sub _emitHADDF_SSE _
 	( _
 		byval dvreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_UOPCB )
 
 	dim dst as string
 
@@ -1775,12 +1846,13 @@ private sub _emitHADDF_SSE _
 
 end sub
 
-
 '':::::
 private sub _emitABSF_SSE _
 	( _
 		byval dvreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_UOPCB )
 
 	dim as string dst, src
 	dim as integer ddsize
@@ -1821,13 +1893,13 @@ private sub _emitABSF_SSE _
 
 end sub
 
-
-
 '':::::
 private sub _emitSGNF_SSE _
 	( _
 		byval dvreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_UOPCB )
 
 	dim as string dst, src
 	dim as FBSYMBOL ptr sym
@@ -1886,9 +1958,8 @@ private sub _emitSGNF_SSE _
 	end if
 end sub
 
-
 '':::::
-private sub _emitSINCOS_FAST_SSE _
+private sub hSINCOS_FAST_SSE _
 	( _
 		byval dvreg as IRVREG ptr, _
 		byval iscos as integer _
@@ -2089,13 +2160,13 @@ end if
 	outp "add esp" + COMMA + str( stackSize )
 end sub
 
-
-
 '':::::
 private sub _emitSIN_SSE _
 	( _
 		byval dvreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_UOPCB )
 
 	dim as string dst
 	dim as integer ddsize
@@ -2103,7 +2174,7 @@ private sub _emitSIN_SSE _
 	ddsize = typeGetSize( dvreg->dtype )
 
 	if( ( ddsize = 4 ) and ( env.clopt.fpmode = FB_FPMODE_FAST ) ) then
-		_emitSINCOS_FAST_SSE dvreg, FALSE
+		hSINCOS_FAST_SSE dvreg, FALSE
 		exit sub
 	end if
 
@@ -2137,12 +2208,13 @@ private sub _emitSIN_SSE _
 
 end sub
 
-
 '':::::
 private sub _emitASIN_SSE _
 	( _
 		byval dvreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_UOPCB )
 
 	dim as string dst
 	dim as integer ddsize
@@ -2184,12 +2256,13 @@ private sub _emitASIN_SSE _
 
 end sub
 
-
 '':::::
 private sub _emitCOS_SSE _
 	( _
 		byval dvreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_UOPCB )
 
 	dim as string dst
 	dim as integer ddsize
@@ -2197,7 +2270,7 @@ private sub _emitCOS_SSE _
 	ddsize = typeGetSize( dvreg->dtype )
 
 	if( ( ddsize = 4 ) and ( env.clopt.fpmode = FB_FPMODE_FAST ) ) then
-		_emitSINCOS_FAST_SSE dvreg, TRUE
+		hSINCOS_FAST_SSE dvreg, TRUE
 		exit sub
 	end if
 
@@ -2231,13 +2304,13 @@ private sub _emitCOS_SSE _
 
 end sub
 
-
-
 '':::::
 private sub _emitACOS_SSE _
 	( _
 		byval dvreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_UOPCB )
 
 	dim as string dst
 	dim as integer ddsize
@@ -2280,12 +2353,13 @@ private sub _emitACOS_SSE _
 
 end sub
 
-
 '':::::
 private sub _emitTAN_SSE _
 	( _
 		byval dvreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_UOPCB )
 
 	dim as string dst
 	dim as integer ddsize
@@ -2322,12 +2396,13 @@ private sub _emitTAN_SSE _
 
 end sub
 
-
 '':::::
 private sub _emitATAN_SSE _
 	( _
 		byval dvreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_UOPCB )
 
 	dim as string dst
 	dim as integer ddsize
@@ -2364,12 +2439,13 @@ private sub _emitATAN_SSE _
 
 end sub
 
-
 '':::::
 private sub _emitSQRT_SSE _
 	( _
 		byval dvreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_UOPCB )
 
 	dim as string dst
 	dim as integer ddsize
@@ -2406,6 +2482,8 @@ private sub _emitRSQRT_SSE _
 		byval dvreg as IRVREG ptr _
 	) static
 
+	ASSERT_PROC_DECL( EMIT_UOPCB )
+
 	dim as string dst
 	dim as integer ddsize
 
@@ -2441,6 +2519,8 @@ private sub _emitRCP_SSE _
 		byval dvreg as IRVREG ptr _
 	) static
 
+	ASSERT_PROC_DECL( EMIT_UOPCB )
+
 	dim as string dst
 	dim as integer ddsize
 
@@ -2470,12 +2550,13 @@ private sub _emitRCP_SSE _
 
 end sub
 
-
 '':::::
 private sub _emitLOG_SSE _
 	( _
 		byval dvreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_UOPCB )
 
 	'' log( x ) = log2( x ) / log2( e ).
 
@@ -2521,6 +2602,8 @@ private sub _emitEXP_SSE _
 	( _
 		byval dvreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_UOPCB )
 
 	dim as string dst
 	dim as integer ddsize
@@ -2569,12 +2652,13 @@ private sub _emitEXP_SSE _
 
 end sub
 
-
 '':::::
 private sub _emitFLOOR_SSE _
 	( _
 		byval dvreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_UOPCB )
 
 	dim as string dst, neg1, suffix
 	dim as integer ddsize
@@ -2630,12 +2714,13 @@ private sub _emitFLOOR_SSE _
 
 end sub
 
-
 '':::::
 private sub _emitFIX_SSE _
 	( _
 		byval dvreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_UOPCB )
 
 	'' dst = floor( abs( dst ) ) * sng( dst )
 
@@ -2718,6 +2803,8 @@ private sub _emitFRAC_SSE _
 	( _
 		byval dvreg as IRVREG ptr _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_UOPCB )
 
 	'' dst = dst - fix( dst )
 
@@ -2808,13 +2895,14 @@ end sub
 '' stack
 ''::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
-
 '':::::
 private sub _emitPUSHF_SSE _
 	( _
 		byval svreg as IRVREG ptr, _
 		byval unused as integer _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_STKCB )
 
 	dim src as string, sdsize as integer
 	dim ostr as string
@@ -2858,13 +2946,14 @@ private sub _emitPUSHF_SSE _
 
 end sub
 
-
 '':::::
 private sub _emitPOPF_SSE _
 	( _
 		byval dvreg as IRVREG ptr, _
 		byval unused as integer _
 	) static
+
+	ASSERT_PROC_DECL( EMIT_STKCB )
 
 	dim as string dst, ostr
 	dim as integer dsize
@@ -2913,13 +3002,19 @@ function _init_opFnTB_SSE _
 	) as integer
 
 	'' load
-	_emitLOADB2F_x86 = _opFnTB_SSE[EMIT_OP_LOADB2F]
+	if( _emitLOADB2F_x86 = NULL ) then
+		_emitLOADB2F_x86 = _opFnTB_SSE[EMIT_OP_LOADB2F]
+	end if
+	if( _emitLOADF2B_x86 = NULL ) then
+		_emitLOADF2B_x86 = _opFnTB_SSE[EMIT_OP_LOADF2B]
+	end if
 	_opFnTB_SSE[EMIT_OP_LOADF2I] = EMIT_CBENTRY(LOADF2I_SSE)
 	_opFnTB_SSE[EMIT_OP_LOADI2F] = EMIT_CBENTRY(LOADI2F_SSE)
 	_opFnTB_SSE[EMIT_OP_LOADF2L] = EMIT_CBENTRY(LOADF2L_SSE)
 	_opFnTB_SSE[EMIT_OP_LOADL2F] = EMIT_CBENTRY(LOADL2F_SSE)
 	_opFnTB_SSE[EMIT_OP_LOADF2F] = EMIT_CBENTRY(LOADF2F_SSE)
 	_opFnTB_SSE[EMIT_OP_LOADB2F] = EMIT_CBENTRY(LOADB2F_SSE)
+	_opFnTB_SSE[EMIT_OP_LOADF2B] = EMIT_CBENTRY(LOADF2B_SSE)
 
 	'' store
 	_opFnTB_SSE[EMIT_OP_STORF2I] = EMIT_CBENTRY(STORF2I_SSE)

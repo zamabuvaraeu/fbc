@@ -106,7 +106,7 @@ enum EMIT_NODEOP
 	'' mem
 	EMIT_OP_MEMMOVE
 	EMIT_OP_MEMSWAP
-	EMIT_OP_MEMCLEAR
+	EMIT_OP_MEMFILL
 	EMIT_OP_STKCLEAR
 
 	'' dgb
@@ -206,6 +206,8 @@ end type
 type EMIT_NODE
 	class                           as EMIT_NODECLASS_ENUM
 
+	options                         as IR_EMITOPT
+
 	union
 		bop                         as EMIT_BOPNODE
 		uop                         as EMIT_UOPNODE
@@ -222,27 +224,52 @@ type EMIT_NODE
 	regFreeTB(EMIT_REGCLASSES-1)    as REG_FREETB
 end type
 
+type EMIT_NOPCB as sub _
+	( _
+	)
 
-type EMIT_BOPCB as sub( byval dvreg as IRVREG ptr, _
-						byval svreg as IRVREG ptr )
+type EMIT_BOPCB as sub _
+	( _
+		byval dvreg as IRVREG ptr, _
+		byval svreg as IRVREG ptr _
+	)
 
-type EMIT_UOPCB as sub( byval dvreg as IRVREG ptr )
+type EMIT_UOPCB as sub _
+	( _
+		byval dvreg as IRVREG ptr _
+	)
 
-type EMIT_RELCB as sub( byval rvreg as IRVREG ptr, _
-						byval label as FBSYMBOL ptr, _
-						byval dvreg as IRVREG ptr, _
-						byval svreg as IRVREG ptr )
+type EMIT_RELCB as sub _
+	( _
+		byval rvreg as IRVREG ptr, _
+		byval label as FBSYMBOL ptr, _
+		byval dvreg as IRVREG ptr, _
+		byval svreg as IRVREG ptr, _
+		byval options as IR_EMITOPT _
+	)
 
-type EMIT_STKCB as sub( byval vreg as IRVREG ptr, _
-						byval extra as integer )
+type EMIT_STKCB as sub _
+	( _
+		byval vreg as IRVREG ptr, _
+		byval extra as integer _
+	)
 
-type EMIT_BRCCB as sub( byval vreg as IRVREG ptr, _
-						byval sym as FBSYMBOL ptr, _
-						byval extra as integer )
+type EMIT_BRCCB as sub _
+	( _
+		byval vreg as IRVREG ptr, _
+		byval sym as FBSYMBOL ptr, _
+		byval extra as integer _
+	)
 
-type EMIT_SOPCB as sub( byval sym as FBSYMBOL ptr )
+type EMIT_SOPCB as sub _
+	( _
+		byval sym as FBSYMBOL ptr _
+	)
 
-type EMIT_LITCB as sub( byval text as zstring ptr )
+type EMIT_LITCB as sub _
+	( _
+		byval text as zstring ptr _
+	)
 
 type EMIT_JTBCB as sub _
 	( _
@@ -419,7 +446,7 @@ end type
 declare function emitInit( ) as integer
 declare sub emitEnd( )
 
-#if __FB_DEBUG__
+#if (__FB_DEBUG__ <> 0) orelse defined(__GAS64_DEBUG__)
 declare function emitDumpRegName( byval dtype as integer, byval reg as integer ) as string
 #endif
 
@@ -600,7 +627,8 @@ declare function emitGT _
 		byval rvreg as IRVREG ptr, _
 		byval label as FBSYMBOL ptr, _
 		byval dvreg as IRVREG ptr, _
-		byval svreg as IRVREG ptr _
+		byval svreg as IRVREG ptr, _
+		byval options as IR_EMITOPT _
 	) as EMIT_NODE ptr
 
 declare function emitLT _
@@ -608,7 +636,8 @@ declare function emitLT _
 		byval rvreg as IRVREG ptr, _
 		byval label as FBSYMBOL ptr, _
 		byval dvreg as IRVREG ptr, _
-		byval svreg as IRVREG ptr _
+		byval svreg as IRVREG ptr, _
+		byval options as IR_EMITOPT _
 	) as EMIT_NODE ptr
 
 declare function emitEQ _
@@ -616,7 +645,8 @@ declare function emitEQ _
 		byval rvreg as IRVREG ptr, _
 		byval label as FBSYMBOL ptr, _
 		byval dvreg as IRVREG ptr, _
-		byval svreg as IRVREG ptr _
+		byval svreg as IRVREG ptr, _
+		byval options as IR_EMITOPT _
 	) as EMIT_NODE ptr
 
 declare function emitNE _
@@ -624,7 +654,8 @@ declare function emitNE _
 		byval rvreg as IRVREG ptr, _
 		byval label as FBSYMBOL ptr, _
 		byval dvreg as IRVREG ptr, _
-		byval svreg as IRVREG ptr _
+		byval svreg as IRVREG ptr, _
+		byval options as IR_EMITOPT _
 	) as EMIT_NODE ptr
 
 declare function emitLE _
@@ -632,7 +663,8 @@ declare function emitLE _
 		byval rvreg as IRVREG ptr, _
 		byval label as FBSYMBOL ptr, _
 		byval dvreg as IRVREG ptr, _
-		byval svreg as IRVREG ptr _
+		byval svreg as IRVREG ptr, _
+		byval options as IR_EMITOPT _
 	) as EMIT_NODE ptr
 
 declare function emitGE _
@@ -640,7 +672,8 @@ declare function emitGE _
 		byval rvreg as IRVREG ptr, _
 		byval label as FBSYMBOL ptr, _
 		byval dvreg as IRVREG ptr, _
-		byval svreg as IRVREG ptr _
+		byval svreg as IRVREG ptr, _
+		byval options as IR_EMITOPT _
 	) as EMIT_NODE ptr
 
 declare function emitATN2 _
@@ -791,10 +824,12 @@ declare function emitMEMSWAP _
 		byval bytes as integer _
 	) as EMIT_NODE ptr
 
-declare function emitMEMCLEAR _
+declare function emitMEMFILL _
 	( _
 		byval dvreg as IRVREG ptr, _
-		byval bytes_vreg as IRVREG ptr _
+		byval bytes_vreg as IRVREG ptr, _
+		byval bytes as integer, _
+		byval fillchar as integer _
 	) as EMIT_NODE ptr
 
 declare function emitSTKCLEAR _
@@ -830,9 +865,9 @@ declare sub emitVARINIBEGIN( byval sym as FBSYMBOL ptr )
 declare sub emitVARINIi( byval dtype as integer, byval value as longint )
 declare sub emitVARINIf( byval dtype as integer, byval value as double )
 declare sub emitVARINIOFS( byval sname as zstring ptr, byval ofs as integer )
-declare sub emitVARINISTR( byval s as const zstring ptr )
+declare sub emitVARINISTR( byval s as const zstring ptr, byval noterm as integer )
 declare sub emitVARINIWSTR( byval s as zstring ptr )
-declare sub emitVARINIPAD( byval bytes as integer )
+declare sub emitVARINIPAD( byval bytes as integer, byval fillchar as integer )
 declare sub emitFBCTINFBEGIN( )
 declare sub emitFBCTINFSTRING( byval s as const zstring ptr )
 declare sub emitFBCTINFEND( )

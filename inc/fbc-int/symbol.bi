@@ -40,7 +40,7 @@ enum FB_DATATYPE
 	FB_DATATYPE_USHORT
 	FB_DATATYPE_WCHAR
 	FB_DATATYPE_INTEGER
-	FB_DATATYPE_UINT
+	FB_DATATYPE_UINTEGER
 	FB_DATATYPE_ENUM
 	FB_DATATYPE_LONG
 	FB_DATATYPE_ULONG
@@ -113,11 +113,17 @@ enum FB_QUERY_SYMBOL explicit
 	typename   = &h0003     '' return the typename as text
 	typenameid = &h0004     '' return the typename as text with specical characters replaced with '_'
 	mangleid   = &h0005     '' return the decorated (mangled) type name (WIP)
+	exists     = &h0006     '' return if the symbol name / identifier is exists
 
 	querymask  = &h00ff     '' mask for query values
 
 	'' filters
-	typeinfo   = &h0100     '' use TYPEOF/expression only when parsing the symbol/expression
+	'' if no filter is given, and filtermask is zero, then the default methods
+	'' are used for symbol lookup.  If filtermask is non-zero, then only use
+	'' the specified methods for symbol lookup
+
+	identifier = &h0100     '' use identifier & type name symbol lookups
+	typeofexpr = &h0200     '' use TYPEOF/expression
 
 	filtermask = &hff00     '' mask for filter values
 
@@ -136,7 +142,7 @@ end enum
 
 '' FB_DATACLASS
 #define isDataClassInteger( sym ) ( __FB_QUERY_SYMBOL__( fbc.FB_QUERY_SYMBOL.dataclass, sym ) = fbc.FB_DATACLASS_INTEGER )
-#define isDataClassFloat( sym )   ( __FB_QUERY_SYMBOL__( fbc.FB_QUERY_SYMBOL.dataclass, sym ) = fbc.FB_DATACLASS_FLOAT )
+#define isDataClassFloat( sym )   ( __FB_QUERY_SYMBOL__( fbc.FB_QUERY_SYMBOL.dataclass, sym ) = fbc.FB_DATACLASS_FPOINT )
 #define isDataClassString( sym )  ( __FB_QUERY_SYMBOL__( fbc.FB_QUERY_SYMBOL.dataclass, sym ) = fbc.FB_DATACLASS_STRING )
 #define isDataClassUDT( sym )     ( __FB_QUERY_SYMBOL__( fbc.FB_QUERY_SYMBOL.dataclass, sym ) = fbc.FB_DATACLASS_UDT )
 #define isDataClassProc( sym )    ( __FB_QUERY_SYMBOL__( fbc.FB_QUERY_SYMBOL.dataclass, sym ) = fbc.FB_DATACLASS_PROC )
@@ -158,9 +164,6 @@ end enum
 #define isTypeUDT( sym )      ( fbcTypeGetDtOnly( __FB_QUERY_SYMBOL__( fbc.FB_QUERY_SYMBOL.datatype, sym ) ) = fbc.FB_DATATYPE_STRUCT )
 #define isTypePointer( sym )  ( fbcTypeGet      ( __FB_QUERY_SYMBOL__( fbc.FB_QUERY_SYMBOL.datatype, sym ) ) = fbc.FB_DATATYPE_POINTER )
 
-
 end namespace
 
 #endif
-
-

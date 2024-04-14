@@ -40,10 +40,11 @@ private function isMacroAllowed(byval s as FBSYMBOL ptr) as integer
 	'' Error recovery: continue parsing as usual
 	if (pp.skipping = FALSE) then
 		if (s->def.flags and FB_DEFINE_FLAGS_NOGCC) then
-			if( env.clopt.backend = FB_BACKEND_GCC ) then
-				errReport(FB_ERRMSG_STMTUNSUPPORTEDINGCC)
+			select case env.clopt.backend
+			case FB_BACKEND_GCC, FB_BACKEND_CLANG
+				errReport(FB_ERRMSG_STMTUNSUPPORTEDINC)
 				return FALSE
-			end if
+			end select
 		end if
 	end if
 	return TRUE
@@ -207,18 +208,50 @@ private function hLoadMacro _
 			case FB_TK_STMTSEP
 				if( not hasParens ) then
 					readdchar = CHAR_COLON
-					prntcnt = 0
+					if( prntcnt > 0 ) then
+						prntcnt -= 1
+					end if
 					exit do
 				end if
 
 			case FB_TK_EOL, FB_TK_EOF
 				if( hasParens ) then
 					hReportMacroError( s, FB_ERRMSG_EXPECTEDRPRNT )
+					prntcnt = 0
 				else
+					if( prntcnt > 0 ) then
+						prntcnt -= 1
+					end if
 					readdchar = iif(t.id = FB_TK_EOF, 0, CHAR_LF)
 				end if
-				prntcnt = 0
 				exit do
+
+			case FB_TK_COMMENT
+				if( hasParens ) then
+					if( argtb ) then
+						if( argtb->count = 0 ) then
+							argtb->count = 1
+						end if
+					end if
+				else
+					do
+						lexSkipToken( LEX_FLAGS or LEXCHECK_NOMULTILINECOMMENT )
+
+						select case lexGetToken( LEX_FLAGS )
+						case FB_TK_EOL, FB_TK_EOF
+							exit do
+						end select
+					loop
+
+					lexSkipToken( LEX_FLAGS or LEXCHECK_NOMULTILINECOMMENT )
+
+					readdchar = iif(t.id = FB_TK_EOF, 0, CHAR_LF)
+					if( prntcnt > 0 ) then
+						prntcnt -= 1
+					end if
+
+					exit do
+				end if
 
 			case CHAR_SPACE, CHAR_TAB
 
@@ -471,7 +504,7 @@ private function hLoadDefine _
 				end if
 			end if
 
-			lgt = symbGetLen( s )
+			lgt = symbGetSizeOf( s )
 		end if
 
 	end if
@@ -644,18 +677,50 @@ private function hLoadMacroW _
 			case FB_TK_STMTSEP
 				if( not hasParens ) then
 					readdchar = CHAR_COLON
-					prntcnt = 0
+					if( prntcnt > 0 ) then
+						prntcnt -= 1
+					end if
 					exit do
 				end if
 
 			case FB_TK_EOL, FB_TK_EOF
 				if( hasParens ) then
 					hReportMacroError( s, FB_ERRMSG_EXPECTEDRPRNT )
+					prntcnt = 0
 				else
+					if( prntcnt > 0 ) then
+						prntcnt -= 1
+					end if
 					readdchar = iif(t.id = FB_TK_EOF, 0, CHAR_LF)
 				end if
-				prntcnt = 0
 				exit do
+
+			case FB_TK_COMMENT
+				if( hasParens ) then
+					if( argtb ) then
+						if( argtb->count = 0 ) then
+							argtb->count = 1
+						end if
+					end if
+				else
+					do
+						lexSkipToken( LEX_FLAGS or LEXCHECK_NOMULTILINECOMMENT )
+
+						select case lexGetToken( LEX_FLAGS )
+						case FB_TK_EOL, FB_TK_EOF
+							exit do
+						end select
+					loop
+
+					lexSkipToken( LEX_FLAGS or LEXCHECK_NOMULTILINECOMMENT)
+
+					readdchar = iif(t.id = FB_TK_EOF, 0, CHAR_LF)
+					if( prntcnt > 0 ) then
+						prntcnt -= 1
+					end if
+
+					exit do
+				end if
 
 			case CHAR_SPACE, CHAR_TAB
 
@@ -918,7 +983,7 @@ private function hLoadDefineW _
 				end if
 			end if
 
-			lgt = symbGetLen( s )
+			lgt = symbGetSizeOf( s )
 		end if
 
 	end if

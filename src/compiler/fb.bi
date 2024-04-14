@@ -2,7 +2,7 @@
 #define __FB_BI__
 
 const FB_VER_MAJOR  = "1"
-const FB_VER_MINOR  = "10"
+const FB_VER_MINOR  = "20"
 const FB_VER_PATCH  = "0"
 const FB_VERSION    = FB_VER_MAJOR + "." + FB_VER_MINOR + "." + FB_VER_PATCH
 const FB_BUILD_DATE = __DATE__
@@ -13,6 +13,12 @@ const FB_SIGN       = "FreeBASIC " + FB_VERSION
 const FB_BUILD_SHA1 = FBSHA1
 #else
 const FB_BUILD_SHA1 = ""
+#endif
+
+#ifdef FBFORKID
+const FB_BUILD_FORK_ID = FBFORKID
+#else
+const FB_BUILD_FORK_ID = ""
 #endif
 
 #define QUOTE !"\""
@@ -104,14 +110,15 @@ enum FB_COMPOPT
 	FB_COMPOPT_EXPORT               '' boolean: export all symbols declared as EXPORT?
 	FB_COMPOPT_MSBITFIELDS          '' boolean: use M$'s bitfields packing?
 	FB_COMPOPT_MULTITHREADED        '' boolean: -mt
-	FB_COMPOPT_GFX                  '' boolean: -gfx (whether gfxlib should be linked)
+	FB_COMPOPT_FBGFX                '' boolean: -fbgfx (whether libfbgfx should be linked)
 	FB_COMPOPT_PIC                  '' boolean: -pic (whether to use position-independent code)
 	FB_COMPOPT_STACKSIZE            '' integer
 	FB_COMPOPT_OBJINFO              '' boolean: write/read .fbctinf sections etc.?
 	FB_COMPOPT_SHOWINCLUDES         '' boolean: -showincludes
-	FB_COMPOPT_MODEVIEW             ''__FB_GUI__
+	FB_COMPOPT_MODEVIEW             '' enum: FB_MODEVIEW (__FB_GUI__)
 	FB_COMPOPT_NOCMDLINE            '' boolean: -z nocmdline, disable #cmdline directives
 	FB_COMPOPT_RETURNINFLTS         '' boolean: -z retinflts, enable returning some structs in floating point registers
+	FB_COMPOPT_NOBUILTINS           '' boolean: -z nobuiltins, disable all non-required builtin procedure definitions
 
 	FB_COMPOPTIONS
 end enum
@@ -163,8 +170,11 @@ enum FB_CPUTYPE
 	FB_CPUTYPE_PENTIUM4
 	FB_CPUTYPE_PENTIUMSSE3
 	FB_CPUTYPE_X86_64
+	FB_CPUTYPE_ARMV5TE
 	FB_CPUTYPE_ARMV6
+	FB_CPUTYPE_ARMV6_FP
 	FB_CPUTYPE_ARMV7A
+	FB_CPUTYPE_ARMV7A_FP
 	FB_CPUTYPE_AARCH64
 	FB_CPUTYPE_PPC
 	FB_CPUTYPE_PPC64
@@ -189,6 +199,7 @@ end enum
 enum FB_FPUTYPE
 	FB_FPUTYPE_FPU
 	FB_FPUTYPE_SSE
+	FB_FPUTYPE_NEON
 end enum
 
 '' floating-point modes
@@ -224,6 +235,7 @@ enum FB_COMPTARGET
 	FB_COMPTARGET_WIN32
 	FB_COMPTARGET_CYGWIN
 	FB_COMPTARGET_LINUX
+	FB_COMPTARGET_ANDROID
 	FB_COMPTARGET_DOS
 	FB_COMPTARGET_XBOX
 	FB_COMPTARGET_FREEBSD
@@ -254,6 +266,7 @@ const FB_DEFAULT_LANG = FB_LANG_FB
 enum FB_BACKEND
 	FB_BACKEND_GAS
 	FB_BACKEND_GCC
+	FB_BACKEND_CLANG
 	FB_BACKEND_LLVM
 	FB_BACKEND_GAS64
 
@@ -313,7 +326,7 @@ type FBCMMLINEOPT
 	export          as integer              '' export all symbols declared as EXPORT (default = true)
 	msbitfields     as integer              '' use M$'s bitfields packing
 	multithreaded   as integer              '' link against thread-safe runtime library (default = false)
-	gfx             as integer              '' Link against gfx library (default = false)
+	fbgfx           as integer              '' Link against gfx library (default = false)
 	pic             as integer              '' Whether to use position-independent code (default = false)
 	stacksize       as integer
 	objinfo         as integer
@@ -321,6 +334,7 @@ type FBCMMLINEOPT
 	modeview        as FB_MODEVIEW
 	nocmdline       as integer              '' dissallow #cmdline directive? (default = false)
 	returninflts    as integer              '' enable returning some structs in floating point registers
+	nobuiltins      as integer              '' disable all non-required builtin procedure definitions
 end type
 
 '' features allowed in the selected language
@@ -394,6 +408,10 @@ const FB_DEFAULT_TARGET     = FB_COMPTARGET_DARWIN
 const FB_HOST_EXEEXT        = ""
 const FB_HOST_PATHDIV       = "/"
 const FB_DEFAULT_TARGET     = FB_COMPTARGET_NETBSD
+#elseif defined(__FB_ANDROID__)
+const FB_HOST_EXEEXT        = ""
+const FB_HOST_PATHDIV       = "/"
+const FB_DEFAULT_TARGET     = FB_COMPTARGET_ANDROID
 #else
 #error Unsupported host
 #endif
@@ -403,19 +421,40 @@ const FB_DEFAULT_TARGET     = FB_COMPTARGET_NETBSD
 	#define __FB_X86__
 #endif
 
+'' defines set by makefile to configure default cpu types:
+'' BUILD_FB_DEFAULT_CPUTYPE_X86
+'' BUILD_FB_DEFAULT_CPUTYPE_ARM
+''
+
+'' default X86 CPU
+#ifdef BUILD_FB_DEFAULT_CPUTYPE_X86
+const FB_DEFAULT_CPUTYPE_X86 = BUILD_FB_DEFAULT_CPUTYPE_X86
+#else
 #ifdef __FB_DOS__
 const FB_DEFAULT_CPUTYPE_X86     = FB_CPUTYPE_486
 #else
 const FB_DEFAULT_CPUTYPE_X86     = FB_CPUTYPE_686
 #endif
+#endif
+
+'' default X86_64 CPU
 const FB_DEFAULT_CPUTYPE_X86_64  = FB_CPUTYPE_X86_64
+
+'' default ARM CPU
+#ifdef BUILD_FB_DEFAULT_CPUTYPE_ARM
+const FB_DEFAULT_CPUTYPE_ARM     = BUILD_FB_DEFAULT_CPUTYPE_ARM
+#else
 const FB_DEFAULT_CPUTYPE_ARM     = FB_CPUTYPE_ARMV7A
+#endif
+
+'' default various CPU's
 const FB_DEFAULT_CPUTYPE_AARCH64 = FB_CPUTYPE_AARCH64
 const FB_DEFAULT_CPUTYPE_PPC     = FB_CPUTYPE_PPC
 const FB_DEFAULT_CPUTYPE_PPC64   = FB_CPUTYPE_PPC64
 const FB_DEFAULT_CPUTYPE_PPC64LE = FB_CPUTYPE_PPC64LE
 const FB_DEFAULT_CPUTYPE_ASMJS   = FB_CPUTYPE_ASMJS
 
+'' default 32 and 64 bit CPU's (based on defaults above)
 #ifdef __FB_ARM__
 	const FB_DEFAULT_CPUTYPE32 = FB_DEFAULT_CPUTYPE_ARM
 	const FB_DEFAULT_CPUTYPE64 = FB_DEFAULT_CPUTYPE_AARCH64
@@ -521,8 +560,8 @@ declare sub fbOverrideFilename(byval filename as zstring ptr)
 declare function fbGetTargetId( ) as string
 declare function fbGetHostId( ) as string
 declare function fbIdentifyOs( byref osid as string ) as integer
-declare function fbIdentifyCpuFamily( byref osid as string ) as integer
-declare function fbCpuTypeFromCpuFamilyId( byref cpufamilyid as string ) as integer
+declare function fbIdentifyCpuFamily( byref cpufamilyid as string ) as integer
+declare function fbDefaultCpuTypeFromCpuFamilyId( byval os as integer, byref cpufamilyid as string ) as integer
 declare function fbGetGccArch( ) as zstring ptr
 declare function fbGetFbcArch( ) as zstring ptr
 declare function fbIs64Bit( ) as integer
@@ -615,6 +654,15 @@ declare function fbGetBackendValistType () as FB_CVA_LIST_TYPEDEF
 #else
 	#define INT_BOOL_TO_STR(y_) str(y_)
 	#define INT_BOOL_TO_WSTR(y_) wstr(y_)
+#endif
+
+
+'' helper macro to assert at compile time that the current
+'' procedure matches a specific function pointer callback
+#if __FB_VERSION__ >= "1.09.0"
+#define ASSERT_PROC_DECL( cb_type ) #assert( typeof( procptr(__FUNCTION_NQ__) ) = typeof( cb_type ) )
+#else
+#define ASSERT_PROC_DECL( cb_type )
 #endif
 
 #endif '' __FB_BI__

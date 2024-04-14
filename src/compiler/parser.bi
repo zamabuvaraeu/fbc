@@ -211,12 +211,13 @@ enum FB_IDOPT
 	FB_IDOPT_DONTCHKPERIOD      = &h00000001
 	FB_IDOPT_SHOWERROR          = &h00000002
 	FB_IDOPT_ISDECL             = &h00000004
-	FB_IDOPT_ISOPERATOR         = &h00000008
+	FB_IDOPT_ALLOWOPERATOR      = &h00000008  '' allow operators in identifier
 	FB_IDOPT_ALLOWSTRUCT        = &h00000010
 	FB_IDOPT_CHECKSTATIC        = &h00000020
 	FB_IDOPT_ISVAR              = &h00000040  '' parsing namespace prefix for variable declaration?
 	FB_IDOPT_NOSKIP             = &h00000080  '' don't skip unused token, caller will do it
 	FB_IDOPT_ISDEFN             = &h00000100  '' is definition (i,e, procedure definition), ignore some access checks
+	FB_IDOPT_ALLOWMEMBERS       = &h00000200  '' allow operators / constructors / destructors in identifier
 
 	FB_IDOPT_DEFAULT            = FB_IDOPT_SHOWERROR or FB_IDOPT_CHECKSTATIC
 end enum
@@ -343,6 +344,13 @@ declare function cParentId _
 	) as FBSYMBOL ptr
 
 declare sub cCurrentParentId( )
+
+declare function cIdentifierOrUDTMember _
+	( _
+		byref parent as FBSYMBOL ptr = NULL, _
+		byval chain_ as FBSYMCHAIN ptr = NULL _
+	) as FBSYMBOL ptr
+
 declare sub cProcDecl( )
 
 declare function cProcHeader _
@@ -523,6 +531,13 @@ declare function cHighestPrecExpr _
 	) as ASTNODE ptr
 
 declare function cDerefExpression( ) as ASTNODE ptr
+
+declare function cProcPtrBody _
+	( _
+		byval dtype as integer, _
+		byval subtype as FBSYMBOL ptr _
+	) as ASTNODE ptr
+
 declare function cAddrOfExpression( ) as ASTNODE ptr
 
 declare function cTypeConvExpr _
@@ -742,7 +757,6 @@ declare function cStrIdxOrMemberDeref _
 	) as ASTNODE ptr
 
 declare sub cAssignment(byval assgexpr as ASTNODE ptr)
-declare function cBydescArrayArgParens( byval arg as ASTNODE ptr ) as FB_PARAMMODE
 declare function cAssignFunctResult( byval is_return as integer ) as integer
 
 declare function cGfxStmt _

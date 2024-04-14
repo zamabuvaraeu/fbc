@@ -37,7 +37,7 @@ function astBuildVarAssign _
 end function
 
 function astBuildFakeWstringAccess( byval sym as FBSYMBOL ptr ) as ASTNODE ptr
-	assert( symbGetIsWstring( sym ) )
+	assert( symbGetIsTemporary( sym ) )
 	function = astNewDEREF( astNewVAR( sym ) )
 end function
 
@@ -50,7 +50,7 @@ function astBuildFakeWstringAssign _
 
 	dim as ASTNODE ptr t = any
 
-	assert( symbGetIsWstring( sym ) )
+	assert( symbGetIsTemporary( sym ) )
 	t = NULL
 
 	'' side-effect?
@@ -135,7 +135,7 @@ function astBuildVarDtorCall overload _
 	'' array? dims can be -1 with "DIM foo()" arrays..
 	if( symbGetArrayDimensions( s ) <> 0 ) then
 		'' destruct and/or free array, if needed
-		function = rtlArrayErase( astNewVAR( s ), symbIsDynamic( s ), check_access )
+		function = rtlArrayErase( astNewNIDXARRAY( astNewVAR( s ) ), symbIsDynamic( s ), check_access )
 	else
 		select case symbGetType( s )
 		'' dyn string?
@@ -144,7 +144,7 @@ function astBuildVarDtorCall overload _
 
 		'' wchar ptr marked as "dynamic wstring"?
 		case typeAddrOf( FB_DATATYPE_WCHAR )
-			assert( symbGetIsWstring( s ) ) '' This check should be done in symbGetVarHasDtor() already
+			assert( symbGetIsTemporary( s ) ) '' This check should be done in symbGetVarHasDtor() already
 			'' It points to a dynamically allocated wchar buffer
 			'' that must be deallocated.
 			function = rtlStrDelete( astNewVAR( s ) )
@@ -277,8 +277,8 @@ function astBuildTempVarClear( byval sym as FBSYMBOL ptr ) as ASTNODE ptr
 	'' WITH compound).
 
 	'' Clear variable's memory
-	function = astNewMEM( AST_OP_MEMCLEAR, astNewVAR( sym ), _
-	                      astNewCONSTi( symbGetLen( sym ) ) )
+	function = astNewMEM( AST_OP_MEMFILL, astNewVAR( sym ), _
+	                      astNewCONSTi( symbGetSizeOf( sym ) ) )
 end function
 
 ''
@@ -666,6 +666,14 @@ function astBuildImplicitCtorCall _
 end function
 
 '':::::
+function astBydescArrayArg( byval arg as ASTNODE ptr ) as FB_PARAMMODE
+	function = INVALID
+	if( astIsNIDXARRAY( arg ) ) then
+		function = FB_PARAMMODE_BYDESC
+	end if
+end function
+
+'':::::
 function astBuildImplicitCtorCallEx _
 	( _
 		byval sym as FBSYMBOL ptr, _
@@ -889,7 +897,7 @@ function astBuildArrayDescIniTree _
 	elm = symbGetNext( elm )
 
 	'' .element_len = len( array )
-	astTypeIniAddAssign( tree, astNewCONSTi( symbGetLen( array ) ), elm )
+	astTypeIniAddAssign( tree, astNewCONSTi( symbGetSizeOf( array ) ), elm )
 
 	elm = symbGetNext( elm )
 
@@ -957,7 +965,7 @@ function astBuildArrayDescIniTree _
 		end if
 		assert( dimensions > 0 )
 		assert( symbDescriptorHasRoomFor( desc, dimensions ) )
-		astTypeIniAddPad( tree, dimensions * symbGetLen( symb.fbarraydim ) )
+		astTypeIniAddPad( tree, dimensions * symbGetSizeOf( symb.fbarraydim ) )
 	end if
 
 	astTypeIniScopeEnd( tree, dimtbfield )
@@ -982,7 +990,7 @@ private function hConstBound _
 
 	'' We must know the array symbol, it's carrying the bounds information
 	select case( arrayexpr->class )
-	case AST_NODECLASS_VAR, AST_NODECLASS_FIELD
+	case AST_NODECLASS_VAR, AST_NODECLASS_FIELD, AST_NODECLASS_NIDXARRAY
 
 	case else
 		exit function

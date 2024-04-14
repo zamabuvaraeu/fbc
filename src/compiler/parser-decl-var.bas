@@ -379,7 +379,7 @@ private sub hCheckExternVarAndRecover _
 		'' Error recovery: make definition match the EXTERN declaration
 		dtype = symbGetFullType( sym )
 		subtype = symbGetSubType( sym )
-		lgt = symbGetLen( sym )
+		lgt = symbGetSizeOf( sym )
 		const AttribsToCopy = FB_SYMBATTRIB_DYNAMIC or FB_SYMBATTRIB_REF
 		attrib = (attrib and (not AttribsToCopy)) or (sym->attrib and AttribsToCopy)
 		dimensions = symbGetArrayDimensions( sym )
@@ -1313,11 +1313,9 @@ end function
 
 private function hCheckDynamicArrayExpr( byval varexpr as ASTNODE ptr ) as ASTNODE ptr
 	if( varexpr andalso astIsNIDXARRAY( varexpr ) ) then
-		varexpr = astRemoveNIDXARRAY( varexpr )
-
-		if( astIsVAR( varexpr ) or astIsFIELD( varexpr ) ) then
-			if( symbIsVar( varexpr->sym ) or symbIsField( varexpr->sym ) ) then
-				if( symbGetIsDynamic( varexpr->sym ) ) then
+		if( astIsVAR( varexpr->l ) or astIsFIELD( varexpr->l ) ) then
+			if( symbIsVar( varexpr->l->sym ) or symbIsField( varexpr->l->sym ) ) then
+				if( symbGetIsDynamic( varexpr->l->sym ) ) then
 					return varexpr
 				end if
 			end if
@@ -1690,7 +1688,7 @@ function cVarDecl _
 					'' REDIM'ing existing symbol, uses the same dtype
 					dtype = symbGetType( sym )
 					subtype = symbGetSubtype( sym )
-					lgt = symbGetLen( sym )
+					lgt = symbGetSizeOf( sym )
 					if( symbIsDynamic( sym ) = FALSE ) then
 						'' if it's a parameter, we won't know if it's dynamic or not until run-time
 						if( symbIsParamVarByDesc( sym ) = FALSE ) then
@@ -1933,7 +1931,7 @@ function cVarDecl _
 				'' Dynamic array? If the dimensions are known, redim it.
 				if( ((attrib and FB_SYMBATTRIB_DYNAMIC) <> 0) and have_bounds ) then
 					if( varexpr = NULL ) then
-						varexpr = astNewVAR( sym )
+						varexpr = astNewNIDXARRAY( astNewVAR( sym ) )
 					end if
 					redimcall = rtlArrayRedim( varexpr, dimensions, exprTB(), _
 					                           dopreserve, (not symbGetDontInit( sym )) )
@@ -2122,7 +2120,7 @@ private function hBuildAutoVarInitializer( byval sym as FBSYMBOL ptr, byval expr
 	'' handle constructors..
 	else
 		dim as integer is_ctorcall = any
-		expr = astBuildImplicitCtorCallEx( sym, expr, cBydescArrayArgParens( expr ), is_ctorcall )
+		expr = astBuildImplicitCtorCallEx( sym, expr, astBydescArrayArg( expr ), is_ctorcall )
 
 		if( expr <> NULL ) then
 			if( is_ctorcall ) then

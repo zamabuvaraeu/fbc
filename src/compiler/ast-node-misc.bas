@@ -196,25 +196,17 @@ end function
 function astNewNIDXARRAY( byval expr as ASTNODE ptr ) as ASTNODE ptr
 	dim as ASTNODE ptr n = any
 
-	n = astNewNode( AST_NODECLASS_NIDXARRAY, FB_DATATYPE_INVALID )
-
+	n = astNewNode( AST_NODECLASS_NIDXARRAY, expr->dtype, expr->subtype )
+	n->sym  = expr->sym
 	n->l = expr
 
 	function = n
 end function
 
 function astLoadNIDXARRAY( byval n as ASTNODE ptr ) as IRVREG ptr
+	assert( FALSE )
 	astDelTree( n->l )
 	function = NULL
-end function
-
-function astRemoveNIDXARRAY( byval n as ASTNODE ptr ) as ASTNODE ptr
-	function = n
-	if( astIsNIDXARRAY( n ) ) then
-		function = n->l
-		n->l = NULL
-		astDelTree( n )
-	end if
 end function
 
 '' Links (l = statement 1; r = statement 2)
@@ -352,8 +344,14 @@ function astNewFIELD _
 	assert( symbIsField( sym ) )
 	if( symbFieldIsBitfield( sym ) ) then
 		if( typeGetDtAndPtrOnly( dtype ) = FB_DATATYPE_BOOLEAN ) then
+			'' !!!TODO!!! check for other sizes of BOOLEAN bitfield containers?
 			'' final type is always a signed int
-			dtype = typeJoin( dtype, FB_DATATYPE_INTEGER )
+			select case symbGetSizeOf( sym )
+			case 1
+				dtype = typeJoin( dtype, FB_DATATYPE_BYTE )
+			case else
+				dtype = typeJoin( dtype, FB_DATATYPE_INTEGER )
+			end select
 		else
 			'' final type is always an unsigned int
 			dtype = typeJoin( dtype, FB_DATATYPE_UINT )
@@ -403,7 +401,12 @@ sub astForgetBitfields( byval n as ASTNODE ptr )
 	astForgetBitfields( n->r )
 end sub
 
-private function hMakeUintMask overload( byval bits as uinteger ) as ASTNODE ptr
+private function hMakeUintMask overload _
+	( _
+		byval bits as uinteger, _
+		byval dtype as integer _
+	) as ASTNODE ptr
+
 	dim mask as ulongint
 	if( bits >= 64 ) then
 		mask = &hFFFFFFFFFFFFFFFFull
@@ -413,11 +416,16 @@ private function hMakeUintMask overload( byval bits as uinteger ) as ASTNODE ptr
 	if( not fbIs64bit( ) ) then
 		mask = culng( mask )
 	end if
-	return astNewCONSTi( mask, FB_DATATYPE_UINT )
+	return astNewCONSTi( mask, dtype )
 end function
 
-private function hMakeUintMask overload( byval bits as uinteger, byval bitpos as uinteger ) as ASTNODE ptr
-	return astNewBOP( AST_OP_SHL, hMakeUintMask( bits ), astNewCONSTi( bitpos ) )
+private function hMakeUintMask overload _
+	( _
+		byval bits as uinteger, _
+		byval bitpos as uinteger, _
+		byval dtype as integer _
+	) as ASTNODE ptr
+	return astNewBOP( AST_OP_SHL, hMakeUintMask( bits, dtype ), astNewCONSTi( bitpos ) )
 end function
 
 private function astSetBitfield _
@@ -434,7 +442,8 @@ private function astSetBitfield _
 	''
 
 	if( symbGetType( bitfield ) = FB_DATATYPE_BOOLEAN ) then
-		l->dtype = typeJoin( bitfield->typ, FB_DATATYPE_UINT )
+		'' !!!TODO!!! check for other sizes of BOOLEAN bitfield containers?
+		l->dtype = typeJoin( bitfield->typ, FB_DATATYPE_UBYTE )
 		l->subtype = NULL
 	else
 		'' Remap type from bitfield to short/integer/etc., whichever was given
@@ -449,7 +458,7 @@ private function astSetBitfield _
 	'' Apply a mask to retrieve all bits but the bitfield's ones
 	l = astNewBOP( AST_OP_AND, l, _
 		astNewUOP( AST_OP_NOT, _
-			hMakeUintMask( bitfield->var_.bits, bitfield->var_.bitpos ) ) )
+			hMakeUintMask( bitfield->var_.bits, bitfield->var_.bitpos, l->dtype ) ) )
 
 	'' This ensures the bitfield is zeroed & clean before the new value
 	'' is ORed in below. Since the new value may contain zeroes while the
@@ -461,17 +470,18 @@ private function astSetBitfield _
 		if( (r->class <> AST_NODECLASS_CONV) orelse (astGetFullType( r ) <> FB_DATATYPE_BOOLEAN) ) then
 			r = astNewCONV( FB_DATATYPE_BOOLEAN, NULL, r )
 		end if
-		r = astNewCONV( FB_DATATYPE_UINT, NULL, r )
-		r = astNewBOP( AST_OP_AND, r, hMakeUintMask( bitfield->var_.bits, bitfield->var_.bitpos ) )
+		'' !!!TODO!!! check for other sizes of BOOLEAN bitfield containers?
+		r = astNewCONV( FB_DATATYPE_UBYTE, NULL, r )
+		r = astNewBOP( AST_OP_AND, r, hMakeUintMask( bitfield->var_.bits, bitfield->var_.bitpos, r->dtype ) )
 	else
 		'' Truncate r if it's too big, ensuring the OR below won't touch any
 		'' other bits outside the target bitfield.
-		r = astNewBOP( AST_OP_AND, r, hMakeUintMask( bitfield->var_.bits ) )
+		r = astNewBOP( AST_OP_AND, r, hMakeUintMask( bitfield->var_.bits, FB_DATATYPE_UINT ) )
 
 		'' Move r into position if the bitfield doesn't lie at the beginning of
 		'' the accessed field.
 		if( bitfield->var_.bitpos > 0 ) then
-			r = astNewBOP( AST_OP_SHL, r, astNewCONSTi( bitfield->var_.bitpos ) )
+			r = astNewBOP( AST_OP_SHL, r, astNewCONSTi( bitfield->var_.bitpos, FB_DATATYPE_UINT ) )
 		end if
 	end if
 
@@ -510,7 +520,7 @@ private function astAccessBitfield _
 	end if
 
 	'' Mask out other bits to the left
-	l = astNewBOP( AST_OP_AND, l, hMakeUintMask( bitfield->var_.bits ) )
+	l = astNewBOP( AST_OP_AND, l, hMakeUintMask( bitfield->var_.bits, FB_DATATYPE_UINT ) )
 
 	'' do boolean conversion after bitfield access
 	if( boolconv ) then
@@ -799,6 +809,7 @@ dim shared dbg_astNodeOpNames( 0 to AST_OPCODES - 1 ) as NameInfo = _
 	( /' @"AST_OP_LE"              , '/ @"<="           /' , 0 '/ ), _
 	( /' @"AST_OP_IS"              , '/ @"IS"           /' , 0 '/ ), _
 	( /' @"AST_OP_NOT"             , '/ @"NOT"          /' , 0 '/ ), _
+	( /' @"AST_OP_BOOLNOT"         , '/ @"BOOLNOT"      /' , 0 '/ ), _
 	( /' @"AST_OP_PLUS"            , '/ @"+"            /' , 0 '/ ), _
 	( /' @"AST_OP_NEG"             , '/ @"NEG"          /' , 0 '/ ), _
 	( /' @"AST_OP_HADD"            , '/ @"HADD"         /' , 0 '/ ), _
@@ -853,7 +864,7 @@ dim shared dbg_astNodeOpNames( 0 to AST_OPCODES - 1 ) as NameInfo = _
 	( /' @"AST_OP_JUMPPTR"         , '/ @"JUMPPTR"      /' , 0 '/ ), _
 	( /' @"AST_OP_MEMMOVE"         , '/ @"MEMMOVE"      /' , 0 '/ ), _
 	( /' @"AST_OP_MEMSWAP"         , '/ @"MEMSWAP"      /' , 0 '/ ), _
-	( /' @"AST_OP_MEMCLEAR"        , '/ @"MEMCLEAR"     /' , 0 '/ ), _
+	( /' @"AST_OP_MEMFILL"         , '/ @"MEMFILL"      /' , 0 '/ ), _
 	( /' @"AST_OP_STKCLEAR"        , '/ @"STKCLEAR"     /' , 0 '/ ), _
 	( /' @"AST_OP_VA_START"        , '/ @"VA_START"     /' , 0 '/ ), _
 	( /' @"AST_OP_VA_END"          , '/ @"VA_END"       /' , 0 '/ ), _
@@ -927,7 +938,14 @@ private function hAstNodeToStr _
 
 	select case as const n->class
 	case AST_NODECLASS_BOP
-		return astDumpOpToStr( n->op.op ) & " =-= " & hSymbToStr( n->op.ex )
+		dim s as zstring * 2 = ""
+		select case n->op.op
+		case AST_OP_EQ, AST_OP_NE, AST_OP_LT, AST_OP_GT, AST_OP_LE, AST_OP_GE
+			if( (n->op.options and AST_OPOPT_DOINVERSE) <> 0 ) then
+				s = "!"
+			end if
+		end select
+		return s & astDumpOpToStr( n->op.op ) & " =-= " & hSymbToStr( n->op.ex )
 
 	case AST_NODECLASS_UOP
 		return astDumpOpToStr( n->op.op )
@@ -1144,8 +1162,8 @@ sub astDumpSmall( byval n as ASTNODE ptr, byref prefix as string )
 		select case as const( n->class )
 		case AST_NODECLASS_MEM
 			select case n->mem.op
-			case AST_OP_MEMCLEAR
-				s += " memclear"
+			case AST_OP_MEMFILL
+				s += " memfill"
 			case AST_OP_MEMMOVE
 				s += " memmove"
 			end select

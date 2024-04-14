@@ -253,7 +253,7 @@
 		), _
 		/' function fb_StrAllocTempResult( byref str as const string ) as string '/ _
 		( _
-			@FB_RTL_STRALLOCTMPRES, NULL, _
+			@FB_RTL_STRALLOCTEMPRES, NULL, _
 			FB_DATATYPE_STRING, FB_FUNCMODE_FBCALL, _
 			NULL, FB_RTL_OPT_NONE, _
 			1, _
@@ -263,7 +263,7 @@
 		), _
 		/' function fb_StrAllocTempDescF( byref str as const any, byval str_size as const integer ) as string '/ _
 		( _
-			@FB_RTL_STRALLOCTMPDESCF, NULL, _
+			@FB_RTL_STRALLOCTEMPDESCF, NULL, _
 			FB_DATATYPE_STRING, FB_FUNCMODE_FBCALL, _
 			NULL, FB_RTL_OPT_NONE, _
 			2, _
@@ -274,7 +274,7 @@
 		), _
 		/' function fb_StrAllocTempDescZ( byval str as const zstring ptr ) as string '/ _
 		( _
-			@FB_RTL_STRALLOCTMPDESCZ, NULL, _
+			@FB_RTL_STRALLOCTEMPDESCZ, NULL, _
 			FB_DATATYPE_STRING, FB_FUNCMODE_FBCALL, _
 			NULL, FB_RTL_OPT_NONE, _
 			1, _
@@ -284,7 +284,7 @@
 		), _
 		/' function fb_StrAllocTempDescZEx( byval str as const zstring ptr, byval len as const integer ) as string '/ _
 		( _
-			@FB_RTL_STRALLOCTMPDESCZEX, NULL, _
+			@FB_RTL_STRALLOCTEMPDESCZEX, NULL, _
 			FB_DATATYPE_STRING, FB_FUNCMODE_FBCALL, _
 			NULL, FB_RTL_OPT_NONE, _
 			2, _
@@ -655,6 +655,19 @@
 				( typeSetIsConst( FB_DATATYPE_STRING ), FB_PARAMMODE_BYREF, FALSE ) _
 			} _
 		), _
+		/' sub fb_StrLsetANA( byref dst as any, byval dst_len as const integer, _
+				byref src as const any, byval src_len as const integer ) '/ _
+		( _
+			@FB_RTL_STRLSETANA, NULL, _
+			FB_DATATYPE_VOID, FB_FUNCMODE_FBCALL, _
+			NULL, FB_RTL_OPT_NONE, _
+			3, _
+			{ _
+				( FB_DATATYPE_VOID, FB_PARAMMODE_BYREF, FALSE ), _
+				( typeSetIsConst( FB_DATATYPE_INTEGER ), FB_PARAMMODE_BYVAL, FALSE ), _
+				( typeSetIsConst( FB_DATATYPE_STRING ), FB_PARAMMODE_BYREF, FALSE ) _
+			} _
+		), _
 		/' sub fb_WstrLset( byval dst as wstring ptr, byval src as const wstring ptr ) '/ _
 		( _
 			@FB_RTL_WSTRLSET, NULL, _
@@ -666,14 +679,27 @@
 				( typeAddrOf( typeSetIsConst( FB_DATATYPE_WCHAR ) ), FB_PARAMMODE_BYVAL, FALSE ) _
 			} _
 		), _
-		/' sub fb_StrRset overload( byref dst as string, byref src as const string ) '/ _
+		/' sub fb_StrRset( byref dst as string, byref src as const string ) '/ _
 		( _
 			@FB_RTL_STRRSET, NULL, _
 			FB_DATATYPE_VOID, FB_FUNCMODE_FBCALL, _
-			NULL, FB_RTL_OPT_OVER, _
+			NULL, FB_RTL_OPT_NONE, _
 			2, _
 			{ _
 				( FB_DATATYPE_STRING, FB_PARAMMODE_BYREF, FALSE ), _
+				( typeSetIsConst( FB_DATATYPE_STRING ), FB_PARAMMODE_BYREF, FALSE ) _
+			} _
+		), _
+		/' sub fb_StrRsetANA overload( byref dst as any, byval dst_len as const integer, _
+				byref src as const any, byval src_len as const integer ) '/ _
+		( _
+			@FB_RTL_STRRSETANA, NULL, _
+			FB_DATATYPE_VOID, FB_FUNCMODE_FBCALL, _
+			NULL, FB_RTL_OPT_OVER, _
+			3, _
+			{ _
+				( FB_DATATYPE_VOID, FB_PARAMMODE_BYREF, FALSE ), _
+				( typeSetIsConst( FB_DATATYPE_INTEGER ), FB_PARAMMODE_BYVAL, FALSE ), _
 				( typeSetIsConst( FB_DATATYPE_STRING ), FB_PARAMMODE_BYREF, FALSE ) _
 			} _
 		), _
@@ -681,7 +707,7 @@
 		( _
 			@FB_RTL_WSTRRSET, NULL, _
 			FB_DATATYPE_VOID, FB_FUNCMODE_FBCALL, _
-			NULL, FB_RTL_OPT_OVER or FB_RTL_OPT_NOQB, _
+			NULL, FB_RTL_OPT_NONE or FB_RTL_OPT_NOQB, _
 			2, _
 			{ _
 				( typeAddrOf( FB_DATATYPE_WCHAR ), FB_PARAMMODE_BYVAL, FALSE ), _
@@ -1897,7 +1923,7 @@
 			NULL, FB_RTL_OPT_OVER or FB_RTL_OPT_NOQB, _
 			2, _
 			{ _
-				( typeSetIsConst( FB_DATATYPE_STRING ), FB_PARAMMODE_BYREF, FALSE ), _
+				( FB_DATATYPE_STRING, FB_PARAMMODE_BYREF, FALSE ), _
 				( typeSetIsConst( FB_DATATYPE_INTEGER ), FB_PARAMMODE_BYVAL, FALSE ) _
 			} _
 		), _
@@ -2685,7 +2711,7 @@ function rtlStrDelete( byval expr as ASTNODE ptr ) as ASTNODE ptr
 end function
 
 '':::::
-function rtlStrAllocTmpResult _
+function rtlStrAllocTempResult _
 	( _
 		byval strg as ASTNODE ptr _
 	) as ASTNODE ptr static
@@ -2695,7 +2721,7 @@ function rtlStrAllocTmpResult _
 	function = NULL
 
 	''
-	proc = astNewCALL( PROCLOOKUP( STRALLOCTMPRES ), NULL )
+	proc = astNewCALL( PROCLOOKUP( STRALLOCTEMPRES ), NULL )
 
 	'' src as string
 	if( astNewARG( proc, strg, FB_DATATYPE_STRING ) = NULL ) then
@@ -2707,7 +2733,7 @@ function rtlStrAllocTmpResult _
 end function
 
 '':::::
-function rtlStrAllocTmpDesc _
+function rtlStrAllocTempDesc _
 	( _
 		byval strexpr as ASTNODE ptr _
 	) as ASTNODE ptr
@@ -2728,9 +2754,9 @@ function rtlStrAllocTmpDesc _
 		'' literal?
 		litsym = astGetStrLitSymbol( strexpr )
 		if( litsym = NULL ) then
-			proc = astNewCALL( PROCLOOKUP( STRALLOCTMPDESCZ ) )
+			proc = astNewCALL( PROCLOOKUP( STRALLOCTEMPDESCZ ) )
 		else
-			proc = astNewCALL( PROCLOOKUP( STRALLOCTMPDESCZEX ) )
+			proc = astNewCALL( PROCLOOKUP( STRALLOCTEMPDESCZEX ) )
 		end if
 
 		'' byval str as zstring ptr
@@ -2740,7 +2766,7 @@ function rtlStrAllocTmpDesc _
 
 		'' length is known at compile-time
 		if( litsym <> NULL ) then
-			lgt = symbGetStrLen( litsym ) - 1   '' less the null-term
+			lgt = symbGetStrLength( litsym )
 
 			'' byval len as integer
 			if( astNewARG( proc, astNewCONSTi( lgt ) ) = NULL ) then
@@ -2749,7 +2775,7 @@ function rtlStrAllocTmpDesc _
 		end if
 
 	case FB_DATATYPE_FIXSTR
-		proc = astNewCALL( PROCLOOKUP( STRALLOCTMPDESCF ) )
+		proc = astNewCALL( PROCLOOKUP( STRALLOCTEMPDESCF ) )
 
 		'' always calc len before pushing the param
 		lgt = rtlCalcStrLen( strexpr, dtype )
@@ -2873,9 +2899,9 @@ function rtlToStr _
 	if( dtype = FB_DATATYPE_WCHAR ) then
 		litsym = astGetStrLitSymbol( expr )
 		if( litsym <> NULL ) then
-			if( env.wchar_doconv ) then
+			if( env.wcharconv <> FB_WCHARCONV_NEVER ) then
 				litsym = symbAllocStrConst( str( *symbGetVarLitTextW( litsym ) ), _
-											symbGetWstrLen( litsym ) - 1 )
+				                            symbGetWstrLength( litsym ) )
 
 				return astNewVAR( litsym )
 			end if
@@ -2978,9 +3004,9 @@ function rtlToWstr _
 	if( dtype = FB_DATATYPE_CHAR ) then
 		litsym = astGetStrLitSymbol( expr )
 		if( litsym <> NULL ) then
-			if( env.wchar_doconv ) then
+			if( env.wcharconv <> FB_WCHARCONV_NEVER ) then
 				litsym = symbAllocWstrConst( wstr( *symbGetVarLitText( litsym ) ), _
-										     symbGetStrLen( litsym ) - 1 )
+				                             symbGetStrLength( litsym ) )
 				return astNewVAR( litsym )
 			end if
 		end if
@@ -3227,23 +3253,41 @@ function rtlStrLRSet _
 	) as integer
 
 	dim as ASTNODE ptr proc = any
+	dim as integer ddtype = any
+	dim as longint dst_size = any
 
 	function = FALSE
 
-	''
-	if( astGetDataType( dstexpr ) <> FB_DATATYPE_WCHAR ) then
-		proc = astNewCALL( iif( is_rset, _
-		                        PROCLOOKUP( STRRSET ), _
-		                        PROCLOOKUP( STRLSET ) ) )
-	else
+	ddtype = astGetDataType( dstexpr )
+
+	select case ddtype
+	case FB_DATATYPE_WCHAR
 		proc = astNewCALL( iif( is_rset, _
 		                        PROCLOOKUP( WSTRRSET ), _
 		                        PROCLOOKUP( WSTRLSET ) ) )
-	end if
+	case FB_DATATYPE_FIXSTR
+		proc = astNewCALL( iif( is_rset, _
+		                        PROCLOOKUP( STRRSETANA ), _
+		                        PROCLOOKUP( STRLSETANA ) ) )
+	case else
+		proc = astNewCALL( iif( is_rset, _
+		                        PROCLOOKUP( STRRSET ), _
+		                        PROCLOOKUP( STRLSET ) ) )
+	end select
 
-	'' dst as string
+	'' dst as string | dst as any
 	if( astNewARG( proc, dstexpr ) = NULL ) then
 		exit function
+	end if
+
+	if( ddtype = FB_DATATYPE_FIXSTR ) then
+		'' always calc len before pushing the param
+		dst_size = rtlCalcStrLen( dstexpr, ddtype )
+
+		'' byval dst_size as integer
+		if( astNewARG( proc, astNewCONSTi( dst_size ) ) = NULL ) then
+			exit function
+		end if
 	end if
 
 	'' src as string
@@ -3776,7 +3820,7 @@ private function hEvalAscCase _
 		w = symbGetVarLitTextW( literal )
 		internallength = len( *w )
 		w = hUnescapeW( w )
-		reallength = symbGetWstrLen( literal ) - 1
+		reallength = symbGetWstrLength( literal )
 
 		if( internallength <> reallength ) then
 			exit function
@@ -3795,7 +3839,7 @@ private function hEvalAscCase _
 		z = symbGetVarLitText( literal )
 		internallength = len( *z )
 		z = hUnescape( z )
-		reallength = symbGetStrLen( literal ) - 1
+		reallength = symbGetStrLength( literal )
 
 		'' Don't do it if it includes internal escape sequences,
 		'' handling these here would be quite hard... (TODO)

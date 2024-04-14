@@ -216,12 +216,13 @@ function cVAFunct() as ASTNODE ptr
 	end if
 
 	'' C backend? va_* not supported
-	if( env.clopt.backend = FB_BACKEND_GCC ) then
-		errReport( FB_ERRMSG_STMTUNSUPPORTEDINGCC, TRUE )
+	select case env.clopt.backend
+	case FB_BACKEND_GCC, FB_BACKEND_CLANG
+		errReport( FB_ERRMSG_STMTUNSUPPORTEDINC, TRUE )
 
 		'' error recovery: fake an expr
 		function = astNewCONSTi( 0 )
-	else
+	case else
 		'' @param
 		var expr = astNewADDROF( astNewVAR( vararg_sym ) )
 
@@ -229,8 +230,8 @@ function cVAFunct() as ASTNODE ptr
 		expr = astNewCONV( typeAddrOf( FB_DATATYPE_VOID ), NULL, expr )
 
 		'' + paramlen( param )
-		function = astNewBOP( AST_OP_ADD, expr, astNewCONSTi( symbGetLen( vararg_param ), FB_DATATYPE_UINT ),,AST_OPOPT_NOCOERCION )
-	end if
+		function = astNewBOP( AST_OP_ADD, expr, astNewCONSTi( symbGetSizeOf( vararg_param ), FB_DATATYPE_UINT ),,AST_OPOPT_NOCOERCION )
+	end select
 end function
 
 '':::::
@@ -448,7 +449,7 @@ function cVALISTStmt _
 			'' expr = astNewCONV( typeAddrOf( FB_DATATYPE_VOID ), NULL, expr )
 
 			'' + paramlen( param )
-			expr = astNewBOP( AST_OP_ADD, expr, astNewCONSTi( symbGetLen( vararg_param ), FB_DATATYPE_UINT ) )
+			expr = astNewBOP( AST_OP_ADD, expr, astNewCONSTi( symbGetSizeOf( vararg_param ), FB_DATATYPE_UINT ) )
 
 			'' cptr( any ptr, list ) = first_vararg
 			astAdd( astNewASSIGN( expr1, expr, AST_OPOPT_DONTCHKPTR ) )

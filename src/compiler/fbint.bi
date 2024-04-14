@@ -563,12 +563,18 @@ enum FB_TARGETOPT
 	FB_TARGETOPT_RETURNINFLTS        = &h00000020   '' mingw-w64 / BSD, but not win-libs
 
 	'' Whether the stack needs to be aligned to 16 bytes before any
-	'' call to external code (x86/x86_64 GNU/Linux and Darwin)
+	'' call to external code (x86/x86_64 GNU/Linux, Android and Darwin)
 	FB_TARGETOPT_STACKALIGN16        = &h00000040
 
 	FB_TARGETOPT_ELF                 = &h00000080
 	FB_TARGETOPT_COFF                = &h00000100
 	FB_TARGETOPT_MACHO               = &h00000200
+end enum
+
+enum FB_WCHARCONV
+	FB_WCHARCONV_NEVER                = 0
+	FB_WCHARCONV_WARNING              = 1
+	FB_WCHARCONV_ALWAYS               = 2
 end enum
 
 type FBTARGET
@@ -614,7 +620,7 @@ type FBENV
 
 	clopt               as FBCMMLINEOPT    '' cmm-line options
 	target              as FBTARGET        '' target specific
-	wchar_doconv        as integer         '' ok to convert literals at compile-time?
+	wcharconv           as FB_WCHARCONV    '' ok to convert literals at compile-time?
 	underscoreprefix    as integer         '' Whether ASM symbols need a leading underscore on the current target
 	pointersize         as integer
 

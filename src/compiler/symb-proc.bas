@@ -152,7 +152,7 @@ function symbProcCalcStdcallSuffixN( byval proc as FBSYMBOL ptr ) as longint
 		else
 			'' Use param's size on stack
 			'' VARARG params have 0 (unknown) length; they do not affect the sum.
-			length += symbGetLen( param )
+			length += symbGetSizeOf( param )
 		end if
 
 		param = param->next
@@ -200,7 +200,7 @@ function symbProcCalcBytesToPop( byval proc as FBSYMBOL ptr ) as longint
 			if( param->param.regnum = 0 ) then
 				'' Param symbols store their size on stack as their length.
 				'' VARARG params have 0 (unknown) length; they do not affect the sum.
-				bytestopop += symbGetLen( param )
+				bytestopop += symbGetSizeOf( param )
 			end if
 			param = param->next
 		wend
@@ -695,7 +695,7 @@ private sub hSetupProcRegisterParameters _
 		assert( env.clopt.nothiscall = FALSE )
 		maxregnum = 1
 	case FB_FUNCMODE_FASTCALL
-		'' should never get here if "-z no-thiscall" is active
+		'' should never get here if "-z no-fastcall" is active
 		assert( env.clopt.nofastcall = FALSE )
 		maxregnum = 2
 	end select
@@ -707,7 +707,7 @@ private sub hSetupProcRegisterParameters _
 		'' Allow:
 		''   - instance params
 		''   - pointers
-		''   - integers where (symbGetLen() <= env.pointersize)
+		''   - integers where (symbGetSizeOf() <= env.pointersize)
 		''   - byref parameters
 
 		var param = symbGetProcHeadParam( proc )
@@ -724,7 +724,7 @@ private sub hSetupProcRegisterParameters _
 				param->param.regnum = regnum
 				regnum += 1
 			elseif( typeGetClass( symbGetType( param ) ) = FB_DATACLASS_INTEGER ) then
-				if( symbGetLen( param ) <= env.pointersize ) then
+				if( symbGetSizeOf( param ) <= env.pointersize ) then
 					'' pass argument in ECX/EDX register
 					param->param.regnum = regnum
 					regnum += 1
@@ -2099,7 +2099,7 @@ private function hCheckOvlParam _
 			return FB_OVLPROC_NO_MATCH
 		end if
 
-		assert( astIsVAR( arg_expr ) or astIsFIELD( arg_expr ) )
+		assert( astIsVAR( arg_expr ) or astIsFIELD( arg_expr ) or astIsNIDXARRAY( arg_expr ) )
 		array = arg_expr->sym
 		assert( symbIsArray( array ) )
 
@@ -2528,7 +2528,7 @@ function symbFindSelfBopOvlProc _
 
 	'' try (l, r) -- don't pass the instance ptr
 	arg1.expr = r
-	arg1.mode = INVALID
+	arg1.mode = astBydescArrayArg(r)
 	arg1.next = NULL
 
 	proc = symbFindClosestOvlProc( head_proc, 1, @arg1, err_num )

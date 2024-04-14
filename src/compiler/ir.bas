@@ -12,7 +12,7 @@ dim shared ir as IRCTX
 
 sub irInit( )
 	select case( env.clopt.backend )
-	case FB_BACKEND_GCC
+	case FB_BACKEND_GCC, FB_BACKEND_CLANG
 		ir.vtbl = irhlc_vtbl
 	case FB_BACKEND_LLVM
 		ir.vtbl = irllvm_vtbl
@@ -184,6 +184,7 @@ function irhlAllocVrIdx _
 	vr->sym = symbol
 	vr->ofs = ofs
 	vr->vidx = vidx
+	vr->mult = mult
 
 	function = vr
 end function
@@ -235,7 +236,7 @@ sub irhlFlushStaticInitializer( byval sym as FBSYMBOL ptr )
 	symbSetTypeIniTree( sym, NULL )
 end sub
 
-#if __FB_DEBUG__
+#if (__FB_DEBUG__ <> 0) orelse defined(__GAS64_DEBUG__)
 function vregDumpToStr( byval v as IRVREG ptr ) as string
 	dim as string s
 	dim as string regname

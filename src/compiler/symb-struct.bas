@@ -144,7 +144,7 @@ function typeCalcNaturalAlign _
 
 	'' LONGINT/DOUBLE are 4-byte aligned on 32bit x86 Linux/DOS/BSD,
 	'' but 8-byte aligned on other systems (Win32/Win64, 64bit Linux/BSD,
-	'' ARM Linux)
+	'' ARM Linux, JS/wasm)
 	if( (fbGetCpuFamily( ) = FB_CPUFAMILY_X86) and _
 		(env.clopt.target <> FB_COMPTARGET_WIN32) ) then
 		'' As a result, on 32bit x86 Linux/DOS/BSD, everything that is
@@ -472,6 +472,7 @@ function symbAddField _
 			symbSetUDTHasDtorField( parent )
 			symbSetUDTHasPtrField( parent )
 		end if
+		symbSetUDTHasZeroedField( parent )
 	else
 		select case( typeGetDtAndPtrOnly( dtype ) )
 		'' var-len string fields? must add a ctor, copyctor and dtor
@@ -484,6 +485,7 @@ function symbAddField _
 				symbSetUDTHasDtorField( parent )
 				symbSetUDTHasPtrField( parent )
 			end if
+			symbSetUDTHasZeroedField( parent )
 
 		'' struct with a ctor or dtor? must add a ctor or dtor too
 		case FB_DATATYPE_STRUCT
@@ -491,6 +493,18 @@ function symbAddField _
 			'' parent if this field has it.
 			if( symbGetUDTHasPtrField( subtype ) ) then
 				symbSetUDTHasPtrField( base_parent )
+			end if
+
+			'' Let the FB_UDTOPT_HASFILLEDFIELD flag propagate up to the
+			'' parent if this field has it.
+			if( symbGetUDTHasFilledField( subtype ) ) then
+				symbSetUDTHasFilledField( base_parent )
+			end if
+
+			'' Let the FB_UDTOPT_HASZEROEDFIELD flag propagate up to the
+			'' parent if this field has it.
+			if( symbGetUDTHasZeroedField( subtype ) ) then
+				symbSetUDTHasZeroedField( base_parent )
 			end if
 
 			if( symbGetCompCtorHead( subtype ) ) then
@@ -509,6 +523,28 @@ function symbAddField _
 				else
 					symbSetUDTHasDtorField( parent )
 				end if
+			end if
+
+		case FB_DATATYPE_FIXSTR
+			'' only the first field in a UNION can decide if it will be zeroed or filled
+			if( symbGetUDTIsUnion( parent ) ) then
+				if( (symbGetUDTHasFilledField( parent ) = FALSE) andalso _
+				    (symbGetUDTHasZeroedField( parent ) = FALSE) ) then
+					symbSetUDTHasFilledField( parent )
+				end if
+			else
+				symbSetUDTHasFilledField( parent )
+			end if
+
+		case else
+			'' only the first field in a UNION can decide if it will be zeroed or filled
+			if( symbGetUDTIsUnion( parent ) ) then
+				if( (symbGetUDTHasFilledField( parent ) = FALSE) andalso _
+				    (symbGetUDTHasZeroedField( parent ) = FALSE) ) then
+					symbSetUDTHasZeroedField( parent )
+				end if
+			else
+				symbSetUDTHasZeroedField( parent )
 			end if
 
 		end select
@@ -748,9 +784,10 @@ private function hGetReturnType( byval sym as FBSYMBOL ptr ) as integer
 	'' C backend: Trivial structs can just be returned as-is, no need to
 	'' "lower the AST" to using registers or a hidden pointer parameter and
 	'' pointer result. Instead, gcc will do that.
-	if( env.clopt.backend = FB_BACKEND_GCC ) then
+	select case env.clopt.backend
+	case FB_BACKEND_GCC, FB_BACKEND_CLANG
 		return FB_DATATYPE_STRUCT
-	end if
+	end select
 
 	'' 64-bit + gas64 + linux?
 	if( fbIs64Bit() ) then
@@ -913,6 +950,15 @@ sub symbStructEnd _
 			end if
 		end if
 	end if
+
+	'' Zeroed fields and Filled fields are incompatible since
+	'' we expect to only use a single memory zero/fill operation
+	if( symbGetUDTHasZeroedField( sym ) andalso symbGetUDTHasFilledField( sym ) ) then
+		'' handle through implicit constructor
+		symbSetUDTHasInitedField( sym )
+		sym->udt.options and= not FB_UDTOPT_HASFILLEDFIELD
+	end if
+
 
 	'' Declare implicit members (but don't implement them yet)
 	symbUdtDeclareDefaultMembers( defaultmembers, sym, mode )

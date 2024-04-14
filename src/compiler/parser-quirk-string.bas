@@ -164,11 +164,11 @@ function cLRSetStmt(byval tk as FB_TOKEN) as integer
 			return TRUE
 		end if
 
-		assert( symbGetLen( dst->subtype ) > 0 )
-		assert( symbGetLen( src->subtype ) > 0 )
+		assert( symbGetSizeOf( dst->subtype ) > 0 )
+		assert( symbGetSizeOf( src->subtype ) > 0 )
 
-		function = rtlMemCopyClear( dstexpr, symbGetLen( dst->subtype ), _
-									srcexpr, symbGetLen( src->subtype ) )
+		function = rtlMemCopyClear( dstexpr, symbGetSizeOf( dst->subtype ), _
+		                            srcexpr, symbGetSizeOf( src->subtype ) )
 	else
 		'' !!!TODO!!! - if udt extends z|wstring, check if operator len()
 		'' was overloaded and pass the length parameters to a separate
@@ -288,7 +288,7 @@ private function cStrASC() as ASTNODE ptr
 	if( litsym <> NULL ) then
 		'' if wstring, check if compile-time conversion can be done
 		if( (astGetDataType( expr1 ) = FB_DATATYPE_WCHAR) and _
-			(env.wchar_doconv = FALSE) ) then
+			(env.wcharconv = FB_WCHARCONV_NEVER) ) then
 			p = -1
 		else
 			'' pos is an constant too?

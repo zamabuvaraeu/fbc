@@ -50,6 +50,8 @@ private function hNidxArray2ArrayAccess( byval nidxarray as ASTNODE ptr ) as AST
 	dim as ASTNODE ptr varexpr = any, idxexpr = any, dataOffset = any
 	dim as FBSYMBOL ptr sym = any
 
+	assert( astIsNIDXARRAY( nidxarray ) )
+
 	varexpr = nidxarray->l
 	astDelNode( nidxarray )
 
@@ -78,7 +80,7 @@ private function hNidxArray2ArrayAccess( byval nidxarray as ASTNODE ptr ) as AST
 		'' lBound * elemLen
 		dataOffset = astNewBOP( AST_OP_MUL, _
 								dataOffset, _
-								astNewCONSTi( symbGetLen( sym ), FB_DATATYPE_UINT ) )
+								astNewCONSTi( symbGetSizeOf( sym ), FB_DATATYPE_UINT ) )
 
 		'' add above to data ptr
 		idxexpr = astNewBOP( AST_OP_ADD, idxexpr, dataOffset )
@@ -104,7 +106,7 @@ private function hNidxArray2ArrayAccess( byval nidxarray as ASTNODE ptr ) as AST
 		'' lBound * elemLen
 		dataOffset = astNewBOP( AST_OP_MUL, _
 								dataOffset, _
-								astNewCONSTi( symbGetLen( sym ), FB_DATATYPE_UINT ) )
+								astNewCONSTi( symbGetSizeOf( sym ), FB_DATATYPE_UINT ) )
 
 		'' add above to data ptr
 		idxexpr = astNewBOP( AST_OP_ADD, idxexpr, dataOffset )
@@ -138,7 +140,7 @@ private function hMaybeArrayAccess2Ptr _
 		if( pdescexpr ) then
 			'' Simply access the array, will be passed BYDESC in rtlGfxGet()
 			assert( symbIsArray( expr->sym ) )
-			*pdescexpr = astNewVAR( expr->sym )
+			*pdescexpr = astNewNIDXARRAY( astNewVAR( expr->sym ) )
 		end if
 		expr = astNewADDROF( expr )
 
@@ -157,7 +159,7 @@ private function hMaybeArrayAccess2Ptr _
 					astDelTree( expr )
 					expr = astNewCONSTi( 0, typeAddrOf( FB_DATATYPE_VOID ) )
 				else
-					*pdescexpr = astCloneTree( expr )
+					*pdescexpr = astNewNIDXARRAY( astCloneTree( expr ) )
 					expr = astNewADDROF( expr )
 				end if
 			else

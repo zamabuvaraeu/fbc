@@ -60,6 +60,18 @@ sub lexPopCtx( )
 		DWstrAllocate( lex.ctx->deftextw, 0 )
 	end if
 
+	'' if it's an include file, don't bother restoring file position because
+	'' we are going to be closing the file and contexts for evaluating
+	'' preprocessor text only should only read buffers in memory
+	if( lex.ctx->kind <> LEX_TKCTX_CONTEXT_INCLUDE ) then
+		'' restore file pointer position if current context is different from previous
+		if( (lex.ctx-1)->physfilepos > 0 ) then
+			if( (lex.ctx-1)->physfilepos <> lex.ctx->physfilepos ) then
+				seek #env.inf.num, (lex.ctx-1)->physfilepos
+			end if
+		end if
+	end if
+
 	lex.ctx -= 1
 
 end sub
@@ -68,14 +80,16 @@ end sub
 '':::::
 sub lexInit _
 	( _
-		byval isinclude as integer, _
-		byval is_fb_eval as integer _
+		byval ctx_kind as LEX_TKCTX_CONTEXT _
 	)
 
 	dim as integer i
 	dim as FBTOKEN ptr n
 
-	if( (env.includerec = 0) and (is_fb_eval = FALSE) ) then
+	'' !!!TODO!!! - determine if env.includerec check can be removed
+
+	'' first time? make sure lex.ctx points to something
+	if( (env.includerec = 0) and (ctx_kind = LEX_TKCTX_CONTEXT_INIT) ) then
 		lex.ctx = @lex.ctxTB(0)
 	end if
 
@@ -101,12 +115,15 @@ sub lexInit _
 	lex.ctx->lahdchar1 = UINVALID
 	lex.ctx->lahdchar2 = UINVALID
 
-	lex.ctx->is_fb_eval = is_fb_eval
+	lex.ctx->kind = ctx_kind
 
-	if( is_fb_eval ) then
+	'' preprocessor evaluation?
+	if( ctx_kind = LEX_TKCTX_CONTEXT_EVAL ) then
 		lex.ctx->linenum = (lex.ctx-1)->linenum
 		lex.ctx->reclevel = (lex.ctx-1)->reclevel
 		lex.ctx->currmacro = (lex.ctx-1)->currmacro
+
+	'' else it is an include file or first time initialization
 	else
 		lex.ctx->linenum = 1
 		lex.ctx->reclevel = 0
@@ -120,7 +137,7 @@ sub lexInit _
 	lex.ctx->deflen = 0
 
 	if( env.inf.format = FBFILE_FORMAT_ASCII ) then
-		lex.ctx->buffptr = iif( is_fb_eval, @lex.ctx->buff, NULL )
+		lex.ctx->buffptr = iif( ctx_kind = LEX_TKCTX_CONTEXT_EVAL, @lex.ctx->buff, NULL )
 		lex.ctx->defptr = NULL
 		DZstrAllocate( lex.ctx->deftext, 0 )
 	else
@@ -129,24 +146,30 @@ sub lexInit _
 		DWstrAllocate( lex.ctx->deftextw, 0 )
 	end if
 
-	''
-	if( is_fb_eval ) then
+	'' preprocessor evaluation?
+	if( ctx_kind = LEX_TKCTX_CONTEXT_EVAL ) then
 		lex.ctx->filepos = (lex.ctx-1)->filepos
 		lex.ctx->lastfilepos = (lex.ctx-1)->lastfilepos
+		lex.ctx->physfilepos = (lex.ctx-1)->physfilepos
+
+	'' else it is an include file or first time initialization
 	else
 		lex.ctx->filepos = 0
 		lex.ctx->lastfilepos = 0
+		lex.ctx->physfilepos = 0
 	end if
 
 	'' only if it's not on an inc file
-	if( (env.includerec = 0) or (is_fb_eval = TRUE) ) then
+	'' !!!TODO!!! - determine if env.includerec check can be removed
+	'' if( ctx_kind <> LEX_TKCTX_CONTEXT_INCLUDE ) then
+	if( (env.includerec = 0) or (ctx_kind = LEX_TKCTX_CONTEXT_EVAL) ) then
 		DZstrAllocate( lex.ctx->currline, 0 )
 		lex.insidemacro = FALSE
 	end if
 
 	lex.ctx->after_space = FALSE
 
-	if( (isinclude = FALSE) and (is_fb_eval = FALSE ) ) then
+	if( ctx_kind = LEX_TKCTX_CONTEXT_INIT ) then
 		ppInit( )
 	end if
 
@@ -217,6 +240,9 @@ private function hReadChar _
 			end if
 		end if
 
+	elseif( lex.ctx->kind = LEX_TKCTX_CONTEXT_EVAL ) then
+		char = 0
+
 	else
 
 		'' buffer empty?
@@ -227,7 +253,8 @@ private function hReadChar _
 				select case as const env.inf.format
 				case FBFILE_FORMAT_ASCII
 					if( get( #env.inf.num, , lex.ctx->buff ) = 0 ) then
-						lex.ctx->bufflen = seek( env.inf.num ) - lex.ctx->filepos
+						lex.ctx->physfilepos = seek( env.inf.num )
+						lex.ctx->bufflen = lex.ctx->physfilepos - lex.ctx->filepos
 						lex.ctx->buffptr = @lex.ctx->buff
 					end if
 
@@ -1128,6 +1155,7 @@ private sub hReadNumber( byref t as FBTOKEN, byval flags as LEXCHECK )
 	var pnum = @t.text[0]
 	*pnum = 0
 	t.len = 0
+	t.hassuffix = false
 
 	select case as const lexCurrentChar( )
 	'' integer part
@@ -1177,6 +1205,7 @@ private sub hReadNumber( byref t as FBTOKEN, byval flags as LEXCHECK )
 			if( (flags and LEXCHECK_NOLETTERSUFFIX) = 0 ) then
 				select case lexCurrentChar( )
 				case CHAR_UUPP, CHAR_ULOW
+					t.hassuffix = TRUE
 					lexEatChar( )
 					t.dtype = typeToUnsigned( t.dtype )
 					have_u_suffix = TRUE
@@ -1187,6 +1216,7 @@ private sub hReadNumber( byref t as FBTOKEN, byval flags as LEXCHECK )
 			'' 'L' | 'l'
 			case CHAR_LUPP, CHAR_LLOW
 				if( (flags and LEXCHECK_NOLETTERSUFFIX) = 0 ) then
+					t.hassuffix = TRUE
 					lexEatChar( )
 					'' 'LL'?
 					var c = lexCurrentChar( )
@@ -1214,6 +1244,7 @@ private sub hReadNumber( byref t as FBTOKEN, byval flags as LEXCHECK )
 				if( (flags and LEXCHECK_NOLETTERSUFFIX) = 0 ) then
 					if( have_u_suffix = FALSE ) then
 						t.dtype = FB_DATATYPE_SINGLE
+						t.hassuffix = TRUE
 						lexEatChar( )
 					end if
 				end if
@@ -1224,6 +1255,7 @@ private sub hReadNumber( byref t as FBTOKEN, byval flags as LEXCHECK )
 				if( (flags and LEXCHECK_NOLETTERSUFFIX) = 0 ) then
 					if( have_u_suffix = FALSE ) then
 						t.dtype = FB_DATATYPE_DOUBLE
+						t.hassuffix = TRUE
 						lexEatChar( )
 					end if
 				end if
@@ -1259,13 +1291,14 @@ private sub hReadNumber( byref t as FBTOKEN, byval flags as LEXCHECK )
 					end if
 				end if
 				t.dtype = FB_DATATYPE_LONG
-
+				t.hassuffix = TRUE
 				lexEatChar( )
 
 			'' '!'
 			case FB_TK_SNGTYPECHAR
 				if( have_u_suffix = FALSE ) then
 					t.dtype = FB_DATATYPE_SINGLE
+					t.hassuffix = TRUE
 					lexEatChar( )
 				end if
 
@@ -1275,6 +1308,7 @@ private sub hReadNumber( byref t as FBTOKEN, byval flags as LEXCHECK )
 					'' isn't it a '##'?
 					if( lexGetLookAheadChar( ) <> FB_TK_DBLTYPECHAR ) then
 						t.dtype = FB_DATATYPE_DOUBLE
+						t.hassuffix = TRUE
 						lexEatChar( )
 					end if
 				end if
@@ -2435,7 +2469,7 @@ function lexPeekCurrentLine _
 	'' get file contents around current token
 	old_p = seek( env.inf.num )
 
-	if( lex.ctx->is_fb_eval ) then
+	if( lex.ctx->kind = LEX_TKCTX_CONTEXT_EVAL ) then
 		p = (lex.ctx-1)->lastfilepos - 512
 	else
 		p = lex.ctx->lastfilepos - 512
