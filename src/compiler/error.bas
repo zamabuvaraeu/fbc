@@ -41,7 +41,7 @@ declare function hMakeParamDesc _
 ''globals
 	dim shared errctx as FB_ERRCTX
 
-	dim shared warningMsgs( 1 to FB_WARNINGMSGS-1 ) as FBWARNING = _
+	dim shared warningMsgs( 1 to FB_WARNINGMSGS ) as FBWARNING = _
 	{ _
 		( /'FB_WARNINGMSG_PASSINGSCALARASPTR        '/ 2, @"Passing scalar as pointer" ), _
 		( /'FB_WARNINGMSG_PASSINGPTRTOSCALAR        '/ 2, @"Passing pointer to scalar" ), _
@@ -92,10 +92,12 @@ declare function hMakeParamDesc _
 		( /'FB_WARNINGMSG_RESERVEDGLOBALSYMBOL      '/ 1, @"Use of reserved global or backend symbol" ), _
 		( /'FB_WARNINGMSG_EXPECTEDDIGIT             '/ 1, @"Expected digit" ), _
 		( /'FB_WARNINGMSG_UPCASTDISCARDSINITIALIZER '/ 1, @"Up-casting discards initializer(s)" ), _
-		( /'FB_WARNINGMSG_BYREFTEMPVAR              '/ 2, @"Suspicious address expression passed to BYREF parameter" ) _
+		( /'FB_WARNINGMSG_BYREFTEMPVAR              '/ 2, @"Suspicious address expression passed to BYREF parameter" ), _
+		( /'FB_WARNINGMSG_MISSINGANDROIDSYSROOT     '/ 1, @"GCC/Clang didn't provide a proper sysroot. You probably have to pass fbc an argument of the form '-sysroot $NDK/platforms/android-$API/arch-$ARCH'" ), _
+		( /'FB_WARNINGMSGS                          '/ 0, @"FB_WARNINGMSGS" ) _
 	}
 
-	dim shared errorMsgs( 1 to FB_ERRMSGS-1 ) as const zstring ptr => _
+	dim shared errorMsgs( 1 to FB_ERRMSGS ) as const zstring ptr => _
 	{ _
 		/'FB_ERRMSG_ARGCNTMISMATCH                     '/ @"Argument count mismatch", _
 		/'FB_ERRMSG_EXPECTEDEOF                        '/ @"Expected End-of-File", _
@@ -181,8 +183,8 @@ declare function hMakeParamDesc _
 		/'FB_ERRMSG_DOSWITHNONX86                      '/ @"Selected non-x86 CPU when compiling for DOS", _
 		/'FB_ERRMSG_GENGASWITHNONX86                   '/ @"Selected -gen gas|gas64 ASM backend is incompatible with CPU", _
 		/'FB_ERRMSG_GENGASWITHOUTINTEL                 '/ @"-asm att used for -gen gas, but -gen gas only supports -asm intel", _
-		/'FB_ERRMSG_PICNOTSUPPORTEDFOREXE              '/ @"-pic used when making executable (only works when making a shared library)", _
-		/'FB_ERRMSG_PICNOTSUPPORTEDFORTARGET           '/ @"-pic used, but not supported by target system (only works for non-x86 Unixes)", _
+		/'FB_ERRMSG_GENGASWITHPIC                      '/ @"-pic is not supported with -gen gas", _
+		/'FB_ERRMSG_PICNOTSUPPORTEDFORTARGET           '/ @"-pic used, but not supported by target system (only works for Unixes)", _
 		/'FB_ERRMSG_CANTINITDYNAMICSTRINGS             '/ @"Var-len strings cannot be initialized", _
 		/'FB_ERRMSG_RECURSIVEUDT                       '/ @"Recursive TYPE or UNION not allowed", _
 		/'FB_ERRMSG_RECURSIVEMACRO                     '/ @"Recursive DEFINE not allowed", _
@@ -382,7 +384,7 @@ declare function hMakeParamDesc _
 		/'FB_ERRMSG_FORNEXTVARIABLEMISMATCH            '/ @"FOR/NEXT variable name mismatch", _
 		/'FB_ERRMSG_OPTIONREQUIRESSSE                  '/ @"Selected option requires an SSE FPU mode", _
 		/'FB_ERRMSG_EXPECTEDRELOP                      '/ @"Expected relational operator ( =, >, <, <>, <=, >= )", _
-		/'FB_ERRMSG_STMTUNSUPPORTEDINGCC               '/ @"Unsupported statement in -gen gcc mode", _
+		/'FB_ERRMSG_STMTUNSUPPORTEDINC                 '/ @"Unsupported statement in -gen gcc/clang mode", _
 		/'FB_ERRMSG_TOOMANYLABELS                      '/ @"Too many labels", _
 		/'FB_ERRMSG_UNSUPPORTEDFUNCTION                '/ @"Unsupported function", _
 		/'FB_ERRMSG_EXPECTEDSUB                        '/ @"Expected sub", _
@@ -424,7 +426,12 @@ declare function hMakeParamDesc _
 		/'FB_ERRMSG_ILLEGALUSEOFRESERVEDSYMBOL         '/ @"Illegal use of reserved symbol", _
 		/'FB_ERRMSG_EXPECTEDCOMMAORSEMICOLON           '/ @"Expected ',' or ';'", _
 		/'FB_ERRMSG_EXPECTEDFILENUMBEREXPRESSION       '/ @"Expected file number expression", _
-		/'FB_ERRMSG_MALFORMEDSOURCEDATEEPOCH           '/ @"Malformed SOURCE_DATE_EPOCH environment variable" _
+		/'FB_ERRMSG_MALFORMEDSOURCEDATEEPOCH           '/ @"Malformed SOURCE_DATE_EPOCH environment variable", _
+		/'FB_ERRMSG_GFXLIBNOTSUPPORTEDFORTARGET        '/ @"Graphics routines were used, but the gfxlib has not been ported to this target", _
+		/'FB_ERRMSG_SSEREQUIRESX86                     '/ @"-fpu sse option can only be used on x86 and x86_64 architectures", _
+		/'FB_ERRMSG_NEONREQUIRESARM                    '/ @"-fpu neon option can only be used on arm architectures", _
+		/'FB_ERRMSG_UNDEFINEDBUILTINSYMBOL             '/ @"Undefined built-in symbol", _
+		/'FB_ERRMSGS                                   '/ @"FB_ERRMSGS"  _
 	}
 
 
@@ -445,6 +452,12 @@ sub errInit( )
 	hashInit( @errctx.undefhash, 64, TRUE )
 
 	listInit( @errctx.paramlocations, 4, sizeof( ERRPARAMLOCATION ) )
+
+	'' sanity check that warningMsgs() and errorMsgs() are the correct length
+	assert( ubound(warningMsgs) = FB_WARNINGMSGS )
+	assert( *warningMsgs(FB_WARNINGMSGS).text = "FB_WARNINGMSGS" )
+	assert( ubound(errorMsgs) = FB_ERRMSGS )
+	assert( *errorMsgs(FB_ERRMSGS) = "FB_ERRMSGS" )
 end sub
 
 sub errEnd( )

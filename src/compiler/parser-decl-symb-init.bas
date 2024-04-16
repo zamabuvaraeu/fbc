@@ -332,7 +332,7 @@ private function hArrayInit _
 				select case as const( typeGetDtAndPtrOnly( ctx.dtype ) )
 				case FB_DATATYPE_FIXSTR, FB_DATATYPE_CHAR, FB_DATATYPE_WCHAR
 					'' Fixed-length strings
-					pad_lgt = symbGetLen( ctx.sym )
+					pad_lgt = symbGetSizeOf( ctx.sym )
 				case else
 					pad_lgt = symbCalcLen( ctx.dtype, ctx.subtype )
 				end select
@@ -413,7 +413,7 @@ private function hUDTInit( byref ctx as FB_INITCTX ) as integer
 		end if
 
 		dim as integer is_ctorcall = any
-		expr = astBuildImplicitCtorCallEx( ctx.sym, expr, cBydescArrayArgParens( expr ), is_ctorcall )
+		expr = astBuildImplicitCtorCallEx( ctx.sym, expr, astBydescArrayArg( expr ), is_ctorcall )
 		if( expr = NULL ) then
 			exit function
 		end if

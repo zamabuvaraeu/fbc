@@ -15,6 +15,12 @@ const FB_BUILD_SHA1 = FBSHA1
 const FB_BUILD_SHA1 = ""
 #endif
 
+#ifdef FBFORKID
+const FB_BUILD_FORK_ID = FBFORKID
+#else
+const FB_BUILD_FORK_ID = ""
+#endif
+
 #define QUOTE !"\""
 #if defined( __FB_WIN32__ ) or defined( __FB_CYGWIN__ ) or defined( __FB_DOS__ )
 	#define NEWLINE !"\r\n"
@@ -109,9 +115,10 @@ enum FB_COMPOPT
 	FB_COMPOPT_STACKSIZE            '' integer
 	FB_COMPOPT_OBJINFO              '' boolean: write/read .fbctinf sections etc.?
 	FB_COMPOPT_SHOWINCLUDES         '' boolean: -showincludes
-	FB_COMPOPT_MODEVIEW             ''__FB_GUI__
+	FB_COMPOPT_MODEVIEW             '' enum: FB_MODEVIEW (__FB_GUI__)
 	FB_COMPOPT_NOCMDLINE            '' boolean: -z nocmdline, disable #cmdline directives
 	FB_COMPOPT_RETURNINFLTS         '' boolean: -z retinflts, enable returning some structs in floating point registers
+	FB_COMPOPT_NOBUILTINS           '' boolean: -z nobuiltins, disable all non-required builtin procedure definitions
 
 	FB_COMPOPTIONS
 end enum
@@ -163,8 +170,11 @@ enum FB_CPUTYPE
 	FB_CPUTYPE_PENTIUM4
 	FB_CPUTYPE_PENTIUMSSE3
 	FB_CPUTYPE_X86_64
+	FB_CPUTYPE_ARMV5TE
 	FB_CPUTYPE_ARMV6
+	FB_CPUTYPE_ARMV6_FP
 	FB_CPUTYPE_ARMV7A
+	FB_CPUTYPE_ARMV7A_FP
 	FB_CPUTYPE_AARCH64
 	FB_CPUTYPE_PPC
 	FB_CPUTYPE_PPC64
@@ -189,6 +199,7 @@ end enum
 enum FB_FPUTYPE
 	FB_FPUTYPE_FPU
 	FB_FPUTYPE_SSE
+	FB_FPUTYPE_NEON
 end enum
 
 '' floating-point modes
@@ -224,6 +235,7 @@ enum FB_COMPTARGET
 	FB_COMPTARGET_WIN32
 	FB_COMPTARGET_CYGWIN
 	FB_COMPTARGET_LINUX
+	FB_COMPTARGET_ANDROID
 	FB_COMPTARGET_DOS
 	FB_COMPTARGET_XBOX
 	FB_COMPTARGET_FREEBSD
@@ -254,6 +266,7 @@ const FB_DEFAULT_LANG = FB_LANG_FB
 enum FB_BACKEND
 	FB_BACKEND_GAS
 	FB_BACKEND_GCC
+	FB_BACKEND_CLANG
 	FB_BACKEND_LLVM
 	FB_BACKEND_GAS64
 
@@ -321,6 +334,7 @@ type FBCMMLINEOPT
 	modeview        as FB_MODEVIEW
 	nocmdline       as integer              '' dissallow #cmdline directive? (default = false)
 	returninflts    as integer              '' enable returning some structs in floating point registers
+	nobuiltins      as integer              '' disable all non-required builtin procedure definitions
 end type
 
 '' features allowed in the selected language
@@ -394,6 +408,10 @@ const FB_DEFAULT_TARGET     = FB_COMPTARGET_DARWIN
 const FB_HOST_EXEEXT        = ""
 const FB_HOST_PATHDIV       = "/"
 const FB_DEFAULT_TARGET     = FB_COMPTARGET_NETBSD
+#elseif defined(__FB_ANDROID__)
+const FB_HOST_EXEEXT        = ""
+const FB_HOST_PATHDIV       = "/"
+const FB_DEFAULT_TARGET     = FB_COMPTARGET_ANDROID
 #else
 #error Unsupported host
 #endif
@@ -403,19 +421,40 @@ const FB_DEFAULT_TARGET     = FB_COMPTARGET_NETBSD
 	#define __FB_X86__
 #endif
 
+'' defines set by makefile to configure default cpu types:
+'' BUILD_FB_DEFAULT_CPUTYPE_X86
+'' BUILD_FB_DEFAULT_CPUTYPE_ARM
+''
+
+'' default X86 CPU
+#ifdef BUILD_FB_DEFAULT_CPUTYPE_X86
+const FB_DEFAULT_CPUTYPE_X86 = BUILD_FB_DEFAULT_CPUTYPE_X86
+#else
 #ifdef __FB_DOS__
 const FB_DEFAULT_CPUTYPE_X86     = FB_CPUTYPE_486
 #else
 const FB_DEFAULT_CPUTYPE_X86     = FB_CPUTYPE_686
 #endif
+#endif
+
+'' default X86_64 CPU
 const FB_DEFAULT_CPUTYPE_X86_64  = FB_CPUTYPE_X86_64
+
+'' default ARM CPU
+#ifdef BUILD_FB_DEFAULT_CPUTYPE_ARM
+const FB_DEFAULT_CPUTYPE_ARM     = BUILD_FB_DEFAULT_CPUTYPE_ARM
+#else
 const FB_DEFAULT_CPUTYPE_ARM     = FB_CPUTYPE_ARMV7A
+#endif
+
+'' default various CPU's
 const FB_DEFAULT_CPUTYPE_AARCH64 = FB_CPUTYPE_AARCH64
 const FB_DEFAULT_CPUTYPE_PPC     = FB_CPUTYPE_PPC
 const FB_DEFAULT_CPUTYPE_PPC64   = FB_CPUTYPE_PPC64
 const FB_DEFAULT_CPUTYPE_PPC64LE = FB_CPUTYPE_PPC64LE
 const FB_DEFAULT_CPUTYPE_ASMJS   = FB_CPUTYPE_ASMJS
 
+'' default 32 and 64 bit CPU's (based on defaults above)
 #ifdef __FB_ARM__
 	const FB_DEFAULT_CPUTYPE32 = FB_DEFAULT_CPUTYPE_ARM
 	const FB_DEFAULT_CPUTYPE64 = FB_DEFAULT_CPUTYPE_AARCH64
@@ -521,8 +560,8 @@ declare sub fbOverrideFilename(byval filename as zstring ptr)
 declare function fbGetTargetId( ) as string
 declare function fbGetHostId( ) as string
 declare function fbIdentifyOs( byref osid as string ) as integer
-declare function fbIdentifyCpuFamily( byref osid as string ) as integer
-declare function fbCpuTypeFromCpuFamilyId( byref cpufamilyid as string ) as integer
+declare function fbIdentifyCpuFamily( byref cpufamilyid as string ) as integer
+declare function fbDefaultCpuTypeFromCpuFamilyId( byval os as integer, byref cpufamilyid as string ) as integer
 declare function fbGetGccArch( ) as zstring ptr
 declare function fbGetFbcArch( ) as zstring ptr
 declare function fbIs64Bit( ) as integer

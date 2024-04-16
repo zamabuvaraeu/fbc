@@ -112,8 +112,8 @@ dim shared as FBTARGET targetinfo(0 to FB_COMPTARGETS-1) = _
 		FB_FUNCMODE_STDCALL, _  '' fbcall
 		FB_FUNCMODE_STDCALL, _  '' stdcall
 		0   or FB_TARGETOPT_EXPORT _
-			or FB_TARGETOPT_RETURNINREGS _
-			or FB_TARGETOPT_COFF _
+		    or FB_TARGETOPT_RETURNINREGS _
+		    or FB_TARGETOPT_COFF _
 	), _
 	( _
 		@"cygwin", _
@@ -121,9 +121,9 @@ dim shared as FBTARGET targetinfo(0 to FB_COMPTARGETS-1) = _
 		FB_FUNCMODE_STDCALL, _
 		FB_FUNCMODE_STDCALL, _
 		0   or FB_TARGETOPT_UNIX _
-			or FB_TARGETOPT_EXPORT _
-			or FB_TARGETOPT_RETURNINREGS _
-			or FB_TARGETOPT_COFF _
+		    or FB_TARGETOPT_EXPORT _
+		    or FB_TARGETOPT_RETURNINREGS _
+		    or FB_TARGETOPT_COFF _
 	), _
 	( _
 		@"linux", _
@@ -131,9 +131,19 @@ dim shared as FBTARGET targetinfo(0 to FB_COMPTARGETS-1) = _
 		FB_FUNCMODE_CDECL, _
 		FB_FUNCMODE_STDCALL_MS, _
 		0   or FB_TARGETOPT_UNIX _
-			or FB_TARGETOPT_CALLEEPOPSHIDDENPTR _
-			or FB_TARGETOPT_STACKALIGN16 _
-			or FB_TARGETOPT_ELF _
+		    or FB_TARGETOPT_CALLEEPOPSHIDDENPTR _
+		    or FB_TARGETOPT_STACKALIGN16 _
+		    or FB_TARGETOPT_ELF _
+	), _
+	( _
+		@"android", _
+		FB_DATATYPE_ULONG, _
+		FB_FUNCMODE_CDECL, _
+		FB_FUNCMODE_STDCALL_MS, _
+		0   or FB_TARGETOPT_UNIX _
+		    or FB_TARGETOPT_CALLEEPOPSHIDDENPTR _
+		    or FB_TARGETOPT_STACKALIGN16 _
+		    or FB_TARGETOPT_ELF _
 	), _
 	( _
 		@"dos", _
@@ -141,7 +151,7 @@ dim shared as FBTARGET targetinfo(0 to FB_COMPTARGETS-1) = _
 		FB_FUNCMODE_CDECL, _
 		FB_FUNCMODE_STDCALL_MS, _
 		0   or FB_TARGETOPT_CALLEEPOPSHIDDENPTR _
-			or FB_TARGETOPT_COFF _
+		    or FB_TARGETOPT_COFF _
 	), _
 	( _
 		@"xbox", _
@@ -149,7 +159,7 @@ dim shared as FBTARGET targetinfo(0 to FB_COMPTARGETS-1) = _
 		FB_FUNCMODE_STDCALL, _
 		FB_FUNCMODE_STDCALL, _
 		0   or FB_TARGETOPT_RETURNINREGS _
-			or FB_TARGETOPT_COFF _
+		    or FB_TARGETOPT_COFF _
 	), _
 	( _
 		@"freebsd", _
@@ -157,10 +167,10 @@ dim shared as FBTARGET targetinfo(0 to FB_COMPTARGETS-1) = _
 		FB_FUNCMODE_CDECL, _
 		FB_FUNCMODE_STDCALL_MS, _
 		0   or FB_TARGETOPT_UNIX _
-			or FB_TARGETOPT_CALLEEPOPSHIDDENPTR _
-			or FB_TARGETOPT_RETURNINREGS _
-			or FB_TARGETOPT_RETURNINFLTS _
-			or FB_TARGETOPT_ELF _
+		    or FB_TARGETOPT_CALLEEPOPSHIDDENPTR _
+		    or FB_TARGETOPT_RETURNINREGS _
+		    or FB_TARGETOPT_RETURNINFLTS _
+		    or FB_TARGETOPT_ELF _
 	), _
 	( _
 		@"dragonfly", _
@@ -168,9 +178,9 @@ dim shared as FBTARGET targetinfo(0 to FB_COMPTARGETS-1) = _
 		FB_FUNCMODE_CDECL, _
 		FB_FUNCMODE_STDCALL_MS, _
 		0   or FB_TARGETOPT_UNIX _
-			or FB_TARGETOPT_CALLEEPOPSHIDDENPTR _
-			or FB_TARGETOPT_RETURNINREGS _
-			or FB_TARGETOPT_ELF _
+		    or FB_TARGETOPT_CALLEEPOPSHIDDENPTR _
+		    or FB_TARGETOPT_RETURNINREGS _
+		    or FB_TARGETOPT_ELF _
 	), _
 	( _
 		@"solaris", _
@@ -178,9 +188,9 @@ dim shared as FBTARGET targetinfo(0 to FB_COMPTARGETS-1) = _
 		FB_FUNCMODE_CDECL, _
 		FB_FUNCMODE_STDCALL_MS, _
 		0   or FB_TARGETOPT_UNIX _
-			or FB_TARGETOPT_CALLEEPOPSHIDDENPTR _
-			or FB_TARGETOPT_RETURNINREGS _
-			or FB_TARGETOPT_ELF _
+		    or FB_TARGETOPT_CALLEEPOPSHIDDENPTR _
+		    or FB_TARGETOPT_RETURNINREGS _
+		    or FB_TARGETOPT_ELF _
 	), _
 	( _
 		@"openbsd", _
@@ -188,10 +198,10 @@ dim shared as FBTARGET targetinfo(0 to FB_COMPTARGETS-1) = _
 		FB_FUNCMODE_CDECL, _
 		FB_FUNCMODE_STDCALL_MS, _
 		0   or FB_TARGETOPT_UNIX _
-			or FB_TARGETOPT_CALLEEPOPSHIDDENPTR _
-			or FB_TARGETOPT_RETURNINREGS _
-			or FB_TARGETOPT_RETURNINFLTS _
-			or FB_TARGETOPT_ELF _
+		    or FB_TARGETOPT_CALLEEPOPSHIDDENPTR _
+		    or FB_TARGETOPT_RETURNINREGS _
+		    or FB_TARGETOPT_RETURNINFLTS _
+		    or FB_TARGETOPT_ELF _
 	), _
 	( _
 		@"darwin", _
@@ -199,10 +209,10 @@ dim shared as FBTARGET targetinfo(0 to FB_COMPTARGETS-1) = _
 		FB_FUNCMODE_CDECL, _
 		FB_FUNCMODE_STDCALL_MS, _
 		0   or FB_TARGETOPT_UNIX _
-			or FB_TARGETOPT_CALLEEPOPSHIDDENPTR _
-			or FB_TARGETOPT_RETURNINREGS _
-			or FB_TARGETOPT_STACKALIGN16 _
-			or FB_TARGETOPT_MACHO _
+		    or FB_TARGETOPT_CALLEEPOPSHIDDENPTR _
+		    or FB_TARGETOPT_RETURNINREGS _
+		    or FB_TARGETOPT_STACKALIGN16 _
+		    or FB_TARGETOPT_MACHO _
 	), _
 	( _
 		@"netbsd", _
@@ -210,10 +220,10 @@ dim shared as FBTARGET targetinfo(0 to FB_COMPTARGETS-1) = _
 		FB_FUNCMODE_CDECL, _
 		FB_FUNCMODE_STDCALL_MS, _
 		0   or FB_TARGETOPT_UNIX _
-			or FB_TARGETOPT_CALLEEPOPSHIDDENPTR _
-			or FB_TARGETOPT_RETURNINREGS _
-			or FB_TARGETOPT_RETURNINFLTS _
-			or FB_TARGETOPT_ELF _
+		    or FB_TARGETOPT_CALLEEPOPSHIDDENPTR _
+		    or FB_TARGETOPT_RETURNINREGS _
+		    or FB_TARGETOPT_RETURNINFLTS _
+		    or FB_TARGETOPT_ELF _
 	), _
 	( _
 		@"js", _
@@ -221,8 +231,8 @@ dim shared as FBTARGET targetinfo(0 to FB_COMPTARGETS-1) = _
 		FB_FUNCMODE_CDECL, _
 		FB_FUNCMODE_STDCALL_MS, _
 		0   or FB_TARGETOPT_UNIX _
-			or FB_TARGETOPT_CALLEEPOPSHIDDENPTR _
-			or FB_TARGETOPT_RETURNINREGS _
+		    or FB_TARGETOPT_CALLEEPOPSHIDDENPTR _
+		    or FB_TARGETOPT_RETURNINREGS _
 	) _
 }
 
@@ -267,8 +277,11 @@ dim shared as FBCPUTYPEINFO cputypeinfo(0 to FB_CPUTYPE__COUNT-1) = _
 	( NULL       , @"pentium4"     , FB_CPUFAMILY_X86    , 32, FALSE ), _ '' FB_CPUTYPE_PENTIUM4
 	( @"prescott", @"pentium4-sse3", FB_CPUFAMILY_X86    , 32, FALSE ), _ '' FB_CPUTYPE_PENTIUMSSE3
 	( NULL       , @"x86-64"       , FB_CPUFAMILY_X86_64 , 64, FALSE ), _ '' FB_CPUTYPE_X86_64
+	( NULL       , @"armv5te"      , FB_CPUFAMILY_ARM    , 32, FALSE ), _ '' FB_CPUTYPE_ARMV5TE
 	( NULL       , @"armv6"        , FB_CPUFAMILY_ARM    , 32, FALSE ), _ '' FB_CPUTYPE_ARMV6
+	( NULL       , @"armv6+fp"     , FB_CPUFAMILY_ARM    , 32, FALSE ), _ '' FB_CPUTYPE_ARMV6_FP
 	( NULL       , @"armv7-a"      , FB_CPUFAMILY_ARM    , 32, FALSE ), _ '' FB_CPUTYPE_ARMV7A
+	( NULL       , @"armv7-a+fp"   , FB_CPUFAMILY_ARM    , 32, FALSE ), _ '' FB_CPUTYPE_ARMV7A_FP
 	( @"armv8-a" , @"aarch64"      , FB_CPUFAMILY_AARCH64, 64, FALSE ), _ '' FB_CPUTYPE_AARCH64
 	( NULL       , @"powerpc"      , FB_CPUFAMILY_PPC    , 32, TRUE  ), _ '' FB_CPUTYPE_PPC
 	( NULL       , @"powerpc64"    , FB_CPUFAMILY_PPC64  , 64, TRUE  ), _ '' FB_CPUTYPE_PPC64
@@ -370,6 +383,8 @@ function fbGetBackendName _
 		function = "gas"
 	case FB_BACKEND_GCC
 		function = "gcc"
+	case FB_BACKEND_CLANG
+		function = "clang"
 	case FB_BACKEND_LLVM
 		function = "llvm"
 	case FB_BACKEND_GAS64
@@ -496,7 +511,7 @@ sub fbInit _
 	hashInit( @env.inconcehash, FB_INITINCFILES, FALSE )
 
 	stackNew( @parser.stmt.stk, FB_INITSTMTSTACKNODES, len( FB_CMPSTMTSTK ), FALSE )
-	lexInit( FALSE, FALSE )
+	lexInit( LEX_TKCTX_CONTEXT_INIT )
 	parserInit( )
 	rtlInit( )
 
@@ -588,6 +603,7 @@ sub fbGlobalInit()
 	env.clopt.modeview      = FB_DEFAULT_MODEVIEW
 	env.clopt.nocmdline     = FALSE
 	env.clopt.returninflts  = FALSE
+	env.clopt.nobuiltins    = FALSE
 
 	env.restart_request     = FB_RESTART_NONE
 	env.restart_action      = FB_RESTART_NONE
@@ -723,6 +739,8 @@ sub fbSetOption( byval opt as integer, byval value as integer )
 	case FB_COMPOPT_RETURNINFLTS
 		env.clopt.returninflts = value
 		hUpdateTargetOptions( )
+	case FB_COMPOPT_NOBUILTINS
+		env.clopt.nobuiltins = value
 	end select
 end sub
 
@@ -821,6 +839,8 @@ function fbGetOption( byval opt as integer ) as integer
 		function = env.clopt.nocmdline
 	case FB_COMPOPT_RETURNINFLTS
 		function = env.clopt.returninflts
+	case FB_COMPOPT_NOBUILTINS
+		function = env.clopt.nobuiltins
 
 	case else
 		function = 0
@@ -972,7 +992,7 @@ function fbIdentifyCpuFamily( byref cpufamilyid as string ) as integer
 	function = -1
 end function
 
-function fbCpuTypeFromCpuFamilyId( byref cpufamilyid as string ) as integer
+function fbDefaultCpuTypeFromCpuFamilyId( byval os as integer, byref cpufamilyid as string ) as integer
 	var cpufamily = fbIdentifyCpuFamily( cpufamilyid )
 	if( cpufamily >= 0 ) then
 		return cpufamilyinfo(cpufamily).defaultcputype
@@ -1045,8 +1065,14 @@ function fbIdentifyFbcArch( byref fbcarch as string ) as integer
 
 	'' Extra names to be recognized by -arch to make it nicer to use
 	select case( fbcarch )
+	case "x86"
+		function = FB_CPUTYPE_686
 	case "x86_64", "amd64"
 		function = FB_CPUTYPE_X86_64
+	case "armv5", "armeabi"
+		function = FB_CPUTYPE_ARMV5TE
+	case "armeabi-v7a", "armv7a", "armv7"
+		function = FB_CPUTYPE_ARMV7A
 	case else
 		function = -1
 	end select
@@ -1299,11 +1325,14 @@ sub fbCompile _
 
 	fbParsePreDefines()
 	fbParsePreIncludes()
+
 	if (fbShouldContinue()) then
 		cProgram()
 	end if
 
-	fbMainEnd( )
+	if (fbShouldContinue()) then
+		fbMainEnd( )
+	end if
 
 	'' compiling only, not cross-compiling?
 	if( fbGetOption( FB_COMPOPT_OBJINFO ) and _
@@ -1661,7 +1690,7 @@ sub fbIncludeFile(byval filename as zstring ptr, byval isonce as integer)
 	'' parse
 	lexPushCtx( )
 
-	lexInit( TRUE, FALSE )
+	lexInit( LEX_TKCTX_CONTEXT_INCLUDE )
 
 	cProgram()
 
@@ -1711,7 +1740,7 @@ function fbGetBackendValistType _
 	dim typedef as FB_CVA_LIST_TYPEDEF = FB_CVA_LIST_NONE
 
 	select case env.clopt.backend
-	case FB_BACKEND_GCC
+	case FB_BACKEND_GCC, FB_BACKEND_CLANG
 
 		select case( fbGetCpuFamily( ) )
 		case FB_CPUFAMILY_X86

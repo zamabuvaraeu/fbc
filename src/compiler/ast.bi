@@ -190,8 +190,9 @@ type AST_NODE_DBG
 end type
 
 type AST_NODE_MEM
-	bytes               as longint
 	op              as integer
+	bytes           as longint
+	fillchar        as integer
 end type
 
 type AST_NODE_STACK
@@ -828,7 +829,8 @@ declare function astNewMEM _
 		byval op as integer, _
 		byval l as ASTNODE ptr, _
 		byval r as ASTNODE ptr, _
-		byval bytes as longint = 0 _
+		byval bytes as longint = 0, _
+		byval fillchar as integer = 0 _
 	) as ASTNODE ptr
 
 declare function astNewMACRO _
@@ -1286,6 +1288,11 @@ declare function astBuildImplicitCtorCall _
 		byval arg_mode as FB_PARAMMODE, _
 		byref is_ctorcall as integer _
 	) as ASTNODE ptr
+
+declare function astBydescArrayArg _
+	( _
+		byval arg as ASTNODE ptr _
+	) as FB_PARAMMODE
 
 declare function astBuildImplicitCtorCallEx _
 	( _

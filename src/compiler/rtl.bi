@@ -12,10 +12,10 @@
 #define FB_RTL_STRCONCATBYREF           "fb_StrConcatByref"
 #define FB_RTL_STRCOMPARE               "fb_StrCompare"
 #define FB_RTL_STRCONCATASSIGN          "fb_StrConcatAssign"
-#define FB_RTL_STRALLOCTMPRES           "fb_StrAllocTempResult"
-#define FB_RTL_STRALLOCTMPDESCF         "fb_StrAllocTempDescF"
-#define FB_RTL_STRALLOCTMPDESCZ         "fb_StrAllocTempDescZ"
-#define FB_RTL_STRALLOCTMPDESCZEX       "fb_StrAllocTempDescZEx"
+#define FB_RTL_STRALLOCTEMPRES          "fb_StrAllocTempResult"
+#define FB_RTL_STRALLOCTEMPDESCF        "fb_StrAllocTempDescF"
+#define FB_RTL_STRALLOCTEMPDESCZ        "fb_StrAllocTempDescZ"
+#define FB_RTL_STRALLOCTEMPDESCZEX      "fb_StrAllocTempDescZEx"
 
 #define FB_RTL_BOOL2STR                 "fb_BoolToStr"
 #define FB_RTL_INT2STR                  "fb_IntToStr"
@@ -63,8 +63,10 @@
 #define FB_RTL_STRFILL1                 "fb_StrFill1"
 #define FB_RTL_STRFILL2                 "fb_StrFill2"
 #define FB_RTL_STRLEN                   "fb_StrLen"
-#define FB_RTL_STRLSET                  "fb_StrLset"
-#define FB_RTL_STRRSET                  "fb_StrRset"
+#define FB_RTL_STRLSET                  "fb_StrLset"        '' set var-len string from var-len string
+#define FB_RTL_STRLSETANA               "fb_StrLsetANA"     '' set var-len string from fixed-len string
+#define FB_RTL_STRRSET                  "fb_StrRset"        '' set var-len string from var-len string
+#define FB_RTL_STRRSETANA               "fb_StrRsetANA"     '' set var-len string from fixed-len string
 #define FB_RTL_STRASC                   "fb_ASC"
 #define FB_RTL_STRCHR                   "fb_CHR"
 #define FB_RTL_STRINSTR                 "fb_StrInstr"
@@ -140,6 +142,7 @@
 #define FB_RTL_ARRAYDESTRUCTOBJ         "fb_ArrayDestructObj"
 #define FB_RTL_ARRAYDESTRUCTSTR         "fb_ArrayDestructStr"
 #define FB_RTL_ARRAYCLEAR               "fb_ArrayClear"
+#define FB_RTL_ARRAYFILL                "fb_ArrayFill"
 #define FB_RTL_ARRAYCLEAROBJ            "fb_ArrayClearObj"
 #define FB_RTL_ARRAYERASE               "fb_ArrayErase"
 #define FB_RTL_ARRAYERASEOBJ            "fb_ArrayEraseObj"
@@ -423,10 +426,10 @@ enum FB_RTL_IDX
 	FB_RTL_IDX_STRCONCATBYREF
 	FB_RTL_IDX_STRCOMPARE
 	FB_RTL_IDX_STRCONCATASSIGN
-	FB_RTL_IDX_STRALLOCTMPRES
-	FB_RTL_IDX_STRALLOCTMPDESCF
-	FB_RTL_IDX_STRALLOCTMPDESCZ
-	FB_RTL_IDX_STRALLOCTMPDESCZEX
+	FB_RTL_IDX_STRALLOCTEMPRES
+	FB_RTL_IDX_STRALLOCTEMPDESCF
+	FB_RTL_IDX_STRALLOCTEMPDESCZ
+	FB_RTL_IDX_STRALLOCTEMPDESCZEX
 
 	FB_RTL_IDX_BOOL2STR
 	FB_RTL_IDX_INT2STR
@@ -475,7 +478,9 @@ enum FB_RTL_IDX
 	FB_RTL_IDX_STRFILL2
 	FB_RTL_IDX_STRLEN
 	FB_RTL_IDX_STRLSET
+	FB_RTL_IDX_STRLSETANA
 	FB_RTL_IDX_STRRSET
+	FB_RTL_IDX_STRRSETANA
 	FB_RTL_IDX_STRASC
 	FB_RTL_IDX_STRCHR
 	FB_RTL_IDX_STRINSTR
@@ -551,6 +556,7 @@ enum FB_RTL_IDX
 	FB_RTL_IDX_ARRAYDESTRUCTOBJ
 	FB_RTL_IDX_ARRAYDESTRUCTSTR
 	FB_RTL_IDX_ARRAYCLEAR
+	FB_RTL_IDX_ARRAYFILL
 	FB_RTL_IDX_ARRAYCLEAROBJ
 	FB_RTL_IDX_ARRAYERASE
 	FB_RTL_IDX_ARRAYERASEOBJ
@@ -833,7 +839,7 @@ enum FB_RTL_OPT
 	FB_RTL_OPT_MT             = &h00000004  '' needs the multithreaded rtlib
 
 	FB_RTL_OPT_ASSERTONLY     = &h00000010  '' only if asserts are enabled
-	''                        = &h00000020
+	FB_RTL_OPT_REQUIRED       = &h00000020  '' required even if -z nobuiltins was given
 	FB_RTL_OPT_STRSUFFIX      = &h00000040  '' has a $ suffix (-lang qb only)
 	FB_RTL_OPT_NOQB           = &h00000080  '' anything but -lang qb
 	FB_RTL_OPT_QBONLY         = &h00000100  '' -lang qb only
@@ -973,12 +979,12 @@ declare function rtlWstrConcatAssign _
 
 declare function rtlStrDelete( byval expr as ASTNODE ptr ) as ASTNODE ptr
 
-declare function rtlStrAllocTmpResult _
+declare function rtlStrAllocTempResult _
 	( _
 		byval strg as ASTNODE ptr _
 	) as ASTNODE ptr
 
-declare function rtlStrAllocTmpDesc _
+declare function rtlStrAllocTempDesc _
 	( _
 		byval strg as ASTNODE ptr _
 	) as ASTNODE ptr

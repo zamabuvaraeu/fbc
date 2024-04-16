@@ -622,11 +622,16 @@ private function hCallProfiler _
 		byval head_node as ASTNODE ptr _
 	) as ASTNODE ptr
 
-	'' on all ports except dos _mcount() is just a normal call
 	if( env.clopt.profile ) then
-		if( env.clopt.target <> FB_COMPTARGET_DOS ) then
-			head_node = astAddAfter( rtlProfileCall_mcount(), head_node )
-		end if
+		select case fbGetOption( FB_COMPOPT_BACKEND )
+		case FB_BACKEND_GCC, FB_BACKEND_CLANG
+			'' _mcount call is inserted by the C compiler
+		case else
+			'' On all ports except dos _mcount() is just a normal call
+			if( env.clopt.target <> FB_COMPTARGET_DOS ) then
+				head_node = astAddAfter( rtlProfileCall_mcount(), head_node )
+			end if
+		end select
 	end if
 
 	function = head_node
@@ -835,11 +840,12 @@ private sub hLoadProcResult( byval proc as FBSYMBOL ptr )
 	'' set as temp, so any assignment or when passed as parameter to another proc
 	'' will deallocate this string)
 	if( (symbGetType( proc ) = FB_DATATYPE_STRING) and (not symbIsReturnByRef( proc )) ) then
-		n = rtlStrAllocTmpResult( astNewVAR( s ) )
+		n = rtlStrAllocTempResult( astNewVAR( s ) )
 
-		if( ( env.clopt.backend = FB_BACKEND_GCC ) or ( env.clopt.backend = FB_BACKEND_LLVM ) or ( env.clopt.backend = FB_BACKEND_GAS64 ) ) then
+		select case env.clopt.backend
+		case FB_BACKEND_GCC, FB_BACKEND_CLANG, FB_BACKEND_LLVM, FB_BACKEND_GAS64
 			n = astNewLOAD( n, symbGetFullType( proc ), TRUE )
-		end if
+		end select
 	else
 		'' Use the real type, in case it's BYREF return or a UDT result
 		n = astNewLOAD( astNewVAR( s, 0, symbGetProcRealType( proc ), _
@@ -916,7 +922,7 @@ private function hCallCtorList _
 			fldexpr = astBuildVarField( this_, fld )
 		else
 			'' iter = @this.field(elements-1)
-			fldexpr = astBuildVarField( this_, fld, (elements - 1) * symbGetLen( fld ) )
+			fldexpr = astBuildVarField( this_, fld, (elements - 1) * symbGetSizeOf( fld ) )
 		end if
 	else
 		if( is_ctor ) then
@@ -924,7 +930,7 @@ private function hCallCtorList _
 			fldexpr = astBuildVarField( this_, NULL, 0 )
 		else
 			'' iter = @symbol(0) + (elements - 1)
-			fldexpr = astBuildVarField( this_, NULL, (elements - 1) * symbGetLen( subtype ) )
+			fldexpr = astBuildVarField( this_, NULL, (elements - 1) * symbGetSizeOf( subtype ) )
 		end if
 	end if
 	tree = astBuildVarAssign( iter, astNewADDROF( fldexpr ), AST_OPOPT_ISINI )
@@ -988,9 +994,10 @@ private function hCallFieldCtor _
 		                         astNewCONSTi( 0, FB_DATATYPE_UINT ), _
 		                         AST_OPOPT_ISINI )
 	else
-		function = astNewMEM( AST_OP_MEMCLEAR, _
+		function = astNewMEM( AST_OP_MEMFILL, _
 		                      astBuildVarField( this_, fld ), _
-		                      astNewCONSTi( symbGetRealSize( fld ) ) )
+		                      astNewCONSTi( symbGetRealSize( fld ) ), _
+		                      0, iif( (symbGetType( fld ) = FB_DATATYPE_FIXSTR), 32, 0 ) )
 	end if
 end function
 
@@ -1022,7 +1029,7 @@ private function hClearUnionFields _
 	*pfinalfield = fld
 
 	'' clear all them at once
-	function = astNewMEM( AST_OP_MEMCLEAR, _
+	function = astNewMEM( AST_OP_MEMFILL, _
 	                      astBuildVarField( this_, base_fld ), _
 	                      astNewCONSTi( bytes ) )
 end function

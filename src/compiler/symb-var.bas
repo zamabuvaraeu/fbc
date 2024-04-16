@@ -96,7 +96,7 @@ function symbGetDescTypeDimensions( byval desctype as FBSYMBOL ptr ) as integer
 	end if
 
 	'' dimensions = sizeof(dimTB) \ sizeof(FBARRAYDIM)
-	dimtbsize = symbGetLen( desctype ) - (env.pointersize * 6)
+	dimtbsize = symbGetSizeOf( desctype ) - (env.pointersize * 6)
 	dimensions = dimtbsize \ (env.pointersize * 3)
 
 	assert( (dimensions > 0) and (dimensions <= FB_MAXARRAYDIMS) )
@@ -276,9 +276,10 @@ function symbAddArrayDesc( byval array as FBSYMBOL ptr ) as FBSYMBOL ptr
 			if( symbIsSuffixed( array ) ) then
 				tempid = *id
 				tempid += *hMangleBuiltInType( symbGetType( array ) )
-				if( env.clopt.backend = FB_BACKEND_GCC ) then
+				select case env.clopt.backend
+				case FB_BACKEND_GCC, FB_BACKEND_CLANG
 					tempid += "$"
-				end if
+				end select
 				id = strptr( tempid )
 			end if
 
@@ -343,7 +344,7 @@ function symbAddArrayDesc( byval array as FBSYMBOL ptr ) as FBSYMBOL ptr
 		exit function
 	end if
 
-	desc->lgt = symbGetLen( desctype )
+	desc->lgt = symbGetSizeOf( desctype )
 	desc->ofs = 0
 
 	desc->stats = stats or (array->stats and FB_SYMBSTATS_ACCESSED)
@@ -719,7 +720,7 @@ end function
 
 function symbGetRealSize( byval sym as FBSYMBOL ptr ) as longint
 	assert( symbIsVar( sym ) or symbIsField( sym ) )
-	var size = iif( symbIsRef( sym ), env.pointersize, symbGetLen( sym ) )
+	var size = iif( symbIsRef( sym ), env.pointersize, symbGetSizeOf( sym ) )
 	size *= symbGetArrayElements( sym )
 	function = size
 end function
@@ -847,7 +848,7 @@ function symbGetVarHasCtor( byval s as FBSYMBOL ptr ) as integer
 
 	'' wchar ptr marked as "dynamic wstring"?
 	case typeAddrOf( FB_DATATYPE_WCHAR )
-		if( symbGetIsWstring( s ) ) then
+		if( symbGetIsTemporary( s ) ) then
 			return TRUE
 		end if
 
@@ -886,7 +887,7 @@ function symbGetVarHasDtor( byval s as FBSYMBOL ptr ) as integer
 
 	'' wchar ptr marked as "dynamic wstring"?
 	case typeAddrOf( FB_DATATYPE_WCHAR )
-		if( symbGetIsWstring(s) ) then
+		if( symbGetIsTemporary(s) ) then
 			return TRUE
 		end if
 

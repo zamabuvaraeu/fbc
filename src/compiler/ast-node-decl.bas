@@ -52,6 +52,7 @@ private function hDefaultInit( byval sym as FBSYMBOL ptr ) as ASTNODE ptr
 	end if
 
 	'' local..
+	dim as long fillchar = 0
 
 	'' Do not initialize?
 	if( symbGetDontInit( sym ) ) then
@@ -78,8 +79,26 @@ private function hDefaultInit( byval sym as FBSYMBOL ptr ) as ASTNODE ptr
 		exit function
 	end if
 
-	function = astNewMEM( AST_OP_MEMCLEAR, astNewVAR( sym ), _
-	                      astNewCONSTi( symbGetLen( sym ) * symbGetArrayElements( sym ) ) )
+
+	select case symbGetType( sym )
+
+	'' fixed string? initialize to spaces
+	case FB_DATATYPE_FIXSTR
+		fillchar = 32
+
+	'' UDT containing only fixed length string?
+	'' optimize to a memory fill instead of implicit constructor
+	case FB_DATATYPE_STRUCT
+		if( symbGetUDTHasFilledField( sym->subtype ) ) then
+			fillchar = 32
+		end if
+
+	end select
+
+	function = astNewMEM( AST_OP_MEMFILL, astNewVAR( sym ), _
+	                      astNewCONSTi( symbGetSizeOf( sym ) _
+	                      * symbGetArrayElements( sym ) ) _
+	                      , 0, fillchar )
 end function
 
 function astNewDECL _
