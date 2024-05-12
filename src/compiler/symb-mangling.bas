@@ -842,7 +842,7 @@ private sub hMangleVariable( byval sym as FBSYMBOL ptr )
 				'' !!! TODO !!! - if backend is gas, then can't mix gcc and gas globals
 				select case env.clopt.backend
 				case FB_BACKEND_GCC, FB_BACKEND_CLANG, FB_BACKEND_GAS64
-					id += "$"
+					' id += "$"
 				end select
 			'' else, the case-sensitive name saved in the alias..
 			else
@@ -881,7 +881,7 @@ private sub hMangleVariable( byval sym as FBSYMBOL ptr )
 							'' using the same base id but different type suffix.
 							id += *hMangleBuiltInType( symbGetType( sym ) )
 							id += "$"
-							
+
 							'' Append the scope level to prevent collisions with symbols
 							'' from parent scopes or from the toplevel namespace.
 							'' Note: locals from the main scope will start at level 0,
