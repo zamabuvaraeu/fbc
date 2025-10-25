@@ -22,6 +22,15 @@ Version 1.20.0
 - Allow ZSTRING*N and WSTRING*N arguments passed to BYREF AS STRING paremeters to be modified (copied back to original variable)
 - updated bindings: WinAPI: replace sdkddkver.bi with hand translated version, preserving the logic of the original
 - rtlib: When array out of bounds check files, show variable/field name, index, lbound, and ubound in the error message  
+- fbc: '-exx' enables '-earraydims' by default to error on wrong number of array dimensions or unallocated arrays breaking previous use of @array(0,...) = NULL to detect unallocated arrays
+- fbc: set bit value '__FB_ERR__' = &h400 if '-earraydims' is enabled
+- PEEK, POKE, and SWAP are now quirk words instead of keywords allowing these names to be used as member procedure names
+- fbdoc: change CRegex.bas to use pcre2 since the libpcre (a.k.a pcre3) is obsolete in favour of pcre2 by upstream (Ahmad Khalifa)
+- PEEK, POKE, and SWAP are now quirk words instead of keywords allowing these names to be used as member procedure names
+- "\Unnnnnnnn" escape sequence is mapped as follows: when within unicode BMP, "\unnnn", otherwise on linux "\Unnnnnnnn", or on windows "\uD8XX\uDCXX" surrogate pair.
+- __FB_QUERY_SYMBOL__( fbc.FB_QUERY_SYMBOL.mangletype, symbol ) returns the mangled type name of symbol
+- headers: portaudio version 19.7.0 - based on pa_stable_v190700_20210406
+- gas64: improve performance of gas64 back-end (SARG)
 
 [added]
 - x86_64: optimize SHL MOD INTDIV to use 32-bit operation when result will be converted to long/ulong
@@ -59,6 +68,13 @@ Version 1.20.0
 - fbc: allow user to optionally disable profiling code generation with '#pragma profile [=value]' or '#pragma push( profile [,value] )'
 - fbc: intrinsic define __FB_OPTION_PROFILE__ to indicate if profiling is currently enabled for code generation
 - rtlib: ./fbc-int/profile.bi - extra features for working with the built-in profiler; ProfileSetFileName(), ProfileGetOptions(), ProfileSetOptions(). ProfileIgnore()
+- '-earraydims' command line option to enable array dimensions checking.  Enabled by default with '-exx' command line option.
+- github #426: add __FB_ARG_LISTEXPAND__( macroname, macroargcount, args... ): expands to one or more 'macroname( .... )' depending on the value of macroargcount and number of arguments in the args... list (skyfish)
+- fbc: command line option '-z optabstract' to support optimizing purely abstract types, and only preserve used pure abstract types (skyfish)
+- fbc: warning when "\u" or "\U" escape sequences are invalid or truncated
+- fbc: __FB_QUERY_SYMBOL__( fbc.FB_QUERY_SYMBOL.mangleid, symbol ) returns the mangled name of symbol
+- fbc: NEW uses callocate instead allocate + memset(0) as it's faster
+- gas64: memfill calls MEMSET if area size is greater than 64 bytes as it's faster
 
 [fixed]
 - github #410: give consistent floating point comparisons results involving NaNs.
@@ -88,6 +104,15 @@ Version 1.20.0
 - fbc: __FB_QUERY_SYMBOL__: evaluation contexts were reading past the end of the current buffer and in to the current file causing tokens to be consumed in the wrong context  
 - github #424: fbc: Invalid assignment/conversion, before 'Then' in function returned Const ZString Ptr
 - updated bindings: WinAPI: Allow FD_SETSIZE to be defined by user before including winsock.bi and winsock2.bi
+- sf.net #469, sf.net #721: check for unallocated dynamic arrays and wrong number of dimensions at run time and throw an error if attempting to access an unallocated array or indexing with the wrong number of dimensions
+- allow long ar and ld command lines in standalone windows builds (adeyblue)
+- gas64: fix casting ulong (with "negative value") to double/single (SARG)
+- gas64: fix optimization prevented converting 32bit memory/register (SARG)
+- fbc: #cmdline "-end" was not resetting the parser, hiding errors and producing a bad executable
+- sf.net #1009: Invalid symbol when accessing indexed PROPERTY arrays BYREF
+- sf.net #795: unsupported \UNNNN escape sequence is miscompiled - expect "\Unnnnnnnn" escape to have 8 digits
+- fbc: unicode code points in UTF-8 and UTF-32LE/BE encoded files were incorrectly converted to UTF-16LE/BE surrogate pairs when code point was in a supplementary planes (codepoints greate than U+FFFF)
+- fbc: fix source typo where bitfield FB_UDTOPT_HASFILLEDFIELD was overlapping FB_UDTOPT_VALISTTYPEMASK possibly causing bad code generation for UDT's with STRING*N fields
 
 
 Version 1.10.3
@@ -95,12 +120,18 @@ Version 1.10.3
 [changed]
 - updated bindings: Windows API - refresh the existing windows headers after retranslating with addition of version 8.1 (&h0603) and windows 10 (&h0A00)
 - updated bindings: add machine translated versions of inc/win/excpt.bi and inc/win/sdkddkver.bi 
+- release: allowing using recipes in the build script to specify which arm bootstrap package to use.  Try to determine automatically the host operating system if a recipe is not explicitly given
+- release: depend on libtinfo6 in debian 12 since it drops support for libtinfo5
 
 [added]
+- makefile: add bootstrap-dist-target to make only a single bootstrap-source-{fbtarget} package to allow variations on the bootstrap requirements for different systems
+- release: build recipes for debian11-arm, debian11-armhf, rpios12-armhf, rpios12-aarch64, ubuntu-24.04-aarch64 
 
 [fixed]
 - github #33: Bi include error in ntdef.bi 
 - bad code generation of operator cast() UDT ptr passed to byval UDT ptr parameter when matching constructors() are also present
+- rtlib/dos: ensure NUL terminating character is written on optimized conversion from ascii to wstring in the event that the copy is truncated - for example copying from a larger temporary string to a fixed length wstring and DISABLE_WCHAR is in use (previously HOST_DOS)
+- gcc warnings on newer gcc 12 in rtlib source files  
 
 
 Version 1.10.2
@@ -108,17 +139,18 @@ Version 1.10.2
 [changed]
 
 [added]
-fbc: add FB_CPUTYPE_ARMV6_FP for -march=armv6+fp
-fbc: add FB_CPUTYPE_ARMV7A_FP for -march=armv7-a+fp
-makefile: pass BOOTFBCFLAGS to bootstrap-dist target when making source boostrap
-makefile: add FBSHA1 to BOOTFBCFLAGS to allow setting fbc's sha-1 version in the bootstrap sources
-makefile:  DEFAULT_CPUTYPE_X86 build option to set the default X86 cpu; if given sets BUILD_FB_DEFAULT_CPUTYPE_X86 compiler configration option
-makefile: add BUILD_FB_DEFAULT_CPUTYPE_X86 to BOOTFBCFLAGS
-fbc: BUILD_FB_DEFAULT_CPUTYPE_X86 to set FB_DEFAULT_CPUTYPE_X86 in source code; if not given then default depends on host
-makefile:  DEFAULT_CPUTYPE_ARM build option to set the default ARM cpu; if given sets BUILD_FB_DEFAULT_CPUTYPE_ARM compiler configration option
-makefile: add BUILD_FB_DEFAULT_CPUTYPE_ARM to BOOTFBCFLAGS
-fbc: BUILD_FB_DEFAULT_CPUTYPE_ARM to set FB_DEFAULT_CPUTYPE_ARM in source code; if not given then default is FB_CPUTYPE_ARMV7A
-makefile: add bootstrap-dist-arm to make ARM/AARCH64 only bootstrap-source-arm package (convenience for different build requirements and not building every source bootstrap target)
+- fbc: add FB_CPUTYPE_ARMV6_FP for -march=armv6+fp
+- fbc: add FB_CPUTYPE_ARMV7A_FP for -march=armv7-a+fp
+- makefile: pass BOOTFBCFLAGS to bootstrap-dist target when making source boostrap
+- makefile: add FBSHA1 to BOOTFBCFLAGS to allow setting fbc's sha-1 version in the bootstrap sources 
+- makefile:  DEFAULT_CPUTYPE_X86 build option to set the default X86 cpu; if given sets BUILD_FB_DEFAULT_CPUTYPE_X86 compiler configration option
+- makefile: add BUILD_FB_DEFAULT_CPUTYPE_X86 to BOOTFBCFLAGS
+- fbc: BUILD_FB_DEFAULT_CPUTYPE_X86 to set FB_DEFAULT_CPUTYPE_X86 in source code; if not given then default depends on host
+- makefile:  DEFAULT_CPUTYPE_ARM build option to set the default ARM cpu; if given sets BUILD_FB_DEFAULT_CPUTYPE_ARM compiler configration option
+- makefile: add BUILD_FB_DEFAULT_CPUTYPE_ARM to BOOTFBCFLAGS
+- fbc: BUILD_FB_DEFAULT_CPUTYPE_ARM to set FB_DEFAULT_CPUTYPE_ARM in source code; if not given then default is FB_CPUTYPE_ARMV7A
+- makefile: add bootstrap-dist-arm to make ARM/AARCH64 only bootstrap-source-arm package (convenience for different build requirements and not building every source bootstrap target)
+- makefile: option FBPACKTARGET=name to set an alternate package name for releases without affecting the default behaviours of FBTARGET
 
 [fixed]
 - updated bindings: BASS to 2.4.17.0

@@ -93,6 +93,7 @@ enum FB_COMPOPT
 	FB_COMPOPT_NULLPTRCHECK         '' boolean: NULL pointer
 	FB_COMPOPT_UNWINDINFO           '' boolean: enable call stack unwind information
 	FB_COMPOPT_ARRAYBOUNDCHECK      '' boolean: array bounds checks
+	FB_COMPOPT_ARRAYDIMSCHECK       '' boolean: array dimensions checks
 	FB_COMPOPT_PROFILE              '' boolean: -profile
 
 	'' error/warning reporting behaviour
@@ -119,6 +120,7 @@ enum FB_COMPOPT
 	FB_COMPOPT_NOCMDLINE            '' boolean: -z nocmdline, disable #cmdline directives
 	FB_COMPOPT_RETURNINFLTS         '' boolean: -z retinflts, enable returning some structs in floating point registers
 	FB_COMPOPT_NOBUILTINS           '' boolean: -z nobuiltins, disable all non-required builtin procedure definitions
+	FB_COMPOPT_OPTABSTRACT          '' boolean: -z optabstract, only supports optimizing purely abstract types
 
 	FB_COMPOPTIONS
 end enum
@@ -307,6 +309,7 @@ type FBCMMLINEOPT
 	extraerrchk     as integer              '' enable NULL pointer/array bounds checks?
 	errlocation     as integer              '' enable reporting of error location (default = false)
 	arrayboundchk   as integer              '' enable array bounds checks?
+	arraydimschk    as integer              '' enable array dimensions checks?
 	nullptrchk      as integer              '' enable NULL pointer checks?
 	unwindinfo      as integer              '' enable call stack unwind information
 	profile         as integer              '' build profiling code (default = false)
@@ -335,6 +338,7 @@ type FBCMMLINEOPT
 	nocmdline       as integer              '' dissallow #cmdline directive? (default = false)
 	returninflts    as integer              '' enable returning some structs in floating point registers
 	nobuiltins      as integer              '' disable all non-required builtin procedure definitions
+	optabstract     as integer              '' only supports optimizing purely abstract types
 end type
 
 enum FB_PROFILE_OPT

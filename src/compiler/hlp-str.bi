@@ -1,5 +1,6 @@
 #ifndef __HELP_STR_BI__
 #define __HELP_STR_BI__
+#include once "dstr.bi"
 
 declare sub ZstrAssign _
 	( _
@@ -64,13 +65,15 @@ declare function hReEscape _
 	( _
 		byval text as zstring ptr, _
 		byref textlen as integer, _
-		byref isunicode as integer _
+		byref isunicode as integer, _
+		byref wrnmsg as FB_WARNINGMSG = 0 _
 	) as zstring ptr
 
 declare function hReEscapeW _
 	( _
 		byval text as wstring ptr, _
-		byref textlen as integer _
+		byref textlen as integer, _
+		byref wrnmsg as FB_WARNINGMSG = 0 _
 	) as wstring ptr
 
 declare function hEscape _
@@ -138,11 +141,15 @@ declare function hIsValidHexDigit( byval ch as integer ) as integer
 
 declare function hStr2long( byref txt as string, byref value as long ) as integer
 
+declare function hWStr2long( byref txt as wstring, byref value as long ) as integer
+
 declare sub hSplitStr(byref txt as string, byref del as string, res() as string)
 
 declare function hStr2Tok(byval txt as const zstring ptr, res() as string) as integer
 
 declare function hStr2Args(byval txt as const zstring ptr, res() as string) as integer
+
+declare function hWStr2Args( byval txt as const wstring ptr, res() as DWSTRING ) as integer
 
 '':::::
 #define ZstrAllocate(chars) xallocate( chars + 1 )

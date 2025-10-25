@@ -605,6 +605,7 @@ sub fbGlobalInit()
 	env.clopt.nocmdline     = FALSE
 	env.clopt.returninflts  = FALSE
 	env.clopt.nobuiltins    = FALSE
+	env.clopt.optabstract   = FALSE
 
 	env.restart_request     = FB_RESTART_NONE
 	env.restart_action      = FB_RESTART_NONE
@@ -679,6 +680,8 @@ sub fbSetOption( byval opt as integer, byval value as integer )
 		env.clopt.errlocation = value
 	case FB_COMPOPT_ARRAYBOUNDCHECK
 		env.clopt.arrayboundchk = value
+	case FB_COMPOPT_ARRAYDIMSCHECK
+		env.clopt.arraydimschk = value
 	case FB_COMPOPT_NULLPTRCHECK
 		env.clopt.nullptrchk = value
 	case FB_COMPOPT_UNWINDINFO
@@ -742,6 +745,8 @@ sub fbSetOption( byval opt as integer, byval value as integer )
 		hUpdateTargetOptions( )
 	case FB_COMPOPT_NOBUILTINS
 		env.clopt.nobuiltins = value
+	case FB_COMPOPT_OPTABSTRACT
+		env.clopt.optabstract = value
 	end select
 end sub
 
@@ -792,6 +797,8 @@ function fbGetOption( byval opt as integer ) as integer
 		function = env.clopt.errlocation
 	case FB_COMPOPT_ARRAYBOUNDCHECK
 		function = env.clopt.arrayboundchk
+	case FB_COMPOPT_ARRAYDIMSCHECK
+		function = env.clopt.arraydimschk
 	case FB_COMPOPT_NULLPTRCHECK
 		function = env.clopt.nullptrchk
 	case FB_COMPOPT_UNWINDINFO
@@ -842,6 +849,8 @@ function fbGetOption( byval opt as integer ) as integer
 		function = env.clopt.returninflts
 	case FB_COMPOPT_NOBUILTINS
 		function = env.clopt.nobuiltins
+	case FB_COMPOPT_OPTABSTRACT
+		function = env.clopt.optabstract
 
 	case else
 		function = 0

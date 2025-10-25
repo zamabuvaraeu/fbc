@@ -1381,26 +1381,27 @@ private function hLinkFiles( ) as integer
 			exit function
 		end if
 	#elseif defined( __FB_WIN32__ )
+		dim forcefile As Long
+		dim targetprefixlen As ULong
 		#ifdef ENABLE_STANDALONE
 			'' "cross"-compiling? djgpp cross tools and emscripten
 			'' build tools can't seem to handle the long command line
 			'' created when linking ./tests/fbc-tests
 			select case fbGetOption( FB_COMPOPT_TARGET )
 			case FB_COMPTARGET_DOS, FB_COMPTARGET_JS
-				if( hPutLdArgsIntoFile( ldcline ) = FALSE ) then
-					exit function
-				end if
+				forcefile = 1
 			end select
 		#else
-			dim toolnamelen as integer = len( "ld.exe " ) + _
-				iif( len( fbc.targetprefix ) > len( fbc.buildprefix ), len( fbc.targetprefix ), len( fbc.buildprefix ) )
-			if( (fbGetOption( FB_COMPOPT_TARGET ) = FB_COMPTARGET_DOS) or _
-				(len( ldcline ) > (2047 - toolnamelen)) ) then
-				if( hPutLdArgsIntoFile( ldcline ) = FALSE ) then
-					exit function
-				end if
-			end if
+			targetprefixlen = len( fbc.targetprefix )
 		#endif
+		dim toolnamelen as integer = len( "ld.exe " ) + _
+			iif( targetprefixlen > len( fbc.buildprefix ), targetprefixlen, len( fbc.buildprefix ) )
+		if( forcefile OrElse (fbGetOption( FB_COMPOPT_TARGET ) = FB_COMPTARGET_DOS) or _
+			(len( ldcline ) > (2047 - toolnamelen)) ) then
+			if( hPutLdArgsIntoFile( ldcline ) = FALSE ) then
+				exit function
+			end if
+		end if
 	#endif
 
 	'' invoke ld
@@ -1884,6 +1885,7 @@ enum
 	OPT_DYLIB
 	OPT_E
 	OPT_EARRAY
+	OPT_EARRAYDIMS
 	OPT_EASSERT
 	OPT_EDEBUG
 	OPT_EDEBUGINFO
@@ -1969,6 +1971,7 @@ dim shared as FBC_CMDLINE_OPTION cmdlineOptionTB(0 to (OPT__COUNT - 1)) = _
 	( FALSE, TRUE , TRUE , TRUE  ), _ '' OPT_DYLIB        affects major initialization, affects output format
 	( FALSE, TRUE , TRUE , FALSE ), _ '' OPT_E            affects code generation
 	( FALSE, TRUE , TRUE , FALSE ), _ '' OPT_EARRAY       affects code generation
+	( FALSE, TRUE , TRUE , FALSE ), _ '' OPT_EARRAYDIMS   affects code generation
 	( FALSE, TRUE , TRUE , FALSE ), _ '' OPT_EASSERT      affects code generation
 	( FALSE, TRUE , TRUE , FALSE ), _ '' OPT_EDEBUG       affects code generation
 	( FALSE, TRUE , TRUE , FALSE ), _ '' OPT_EDEBUGINFO   affects code generation, affects link
@@ -2089,6 +2092,9 @@ private sub handleOpt _
 	case OPT_EARRAY
 		fbSetOption( FB_COMPOPT_ARRAYBOUNDCHECK, TRUE )
 
+	case OPT_EARRAYDIMS
+		fbSetOption( FB_COMPOPT_ARRAYDIMSCHECK, TRUE )
+
 	case OPT_EASSERT
 		fbSetOption( FB_COMPOPT_ASSERTIONS, TRUE )
 
@@ -2121,6 +2127,7 @@ private sub handleOpt _
 		fbSetOption( FB_COMPOPT_EXTRAERRCHECK, TRUE )
 		fbSetOption( FB_COMPOPT_ERRLOCATION, TRUE )
 		fbSetOption( FB_COMPOPT_ARRAYBOUNDCHECK, TRUE )
+		fbSetOption( FB_COMPOPT_ARRAYDIMSCHECK, TRUE )
 		fbSetOption( FB_COMPOPT_NULLPTRCHECK, TRUE )
 		fbSetOption( FB_COMPOPT_UNWINDINFO, TRUE )
 
@@ -2542,6 +2549,8 @@ private sub handleOpt _
 			fbSetOption( FB_COMPOPT_RETURNINFLTS, TRUE )
 		case "nobuiltins"
 			fbSetOption( FB_COMPOPT_NOBUILTINS, TRUE )
+		case "optabstract"
+			fbSetOption( FB_COMPOPT_OPTABSTRACT, TRUE )
 		case else
 			hFatalInvalidOption( arg, is_source )
 		end select
@@ -2587,6 +2596,7 @@ private function parseOption(byval opt as zstring ptr) as integer
 		ONECHAR(OPT_E)
 		CHECK("ex", OPT_EX)
 		CHECK("earray", OPT_EARRAY)
+		CHECK("earraydims", OPT_EARRAYDIMS)
 		CHECK("eassert", OPT_EASSERT)
 		CHECK("edebug", OPT_EDEBUG)
 		CHECK("edebuginfo", OPT_EDEBUGINFO)
@@ -2969,8 +2979,7 @@ private sub hCheckArgs()
 	''
 	select case( fbGetOption( FB_COMPOPT_FPUTYPE ) )
 	case FB_FPUTYPE_FPU
-		if( fbGetOption( FB_COMPOPT_VECTORIZE ) >= FB_VECTORIZE_NORMAL ) or _
-		    ( fbGetOption( FB_COMPOPT_FPMODE ) = FB_FPMODE_FAST ) then
+		if( fbGetOption( FB_COMPOPT_VECTORIZE ) >= FB_VECTORIZE_NORMAL ) then
 			errReportEx( FB_ERRMSG_OPTIONREQUIRESSSE, "", -1 )
 			fbcEnd( 1 )
 		end if
@@ -4155,6 +4164,22 @@ private function hArchiveFiles( ) as integer
 		ar = FBCTOOL_EMAR
 	end if
 
+'' See comment in hLinkFiles about command line lengths
+#if defined( __FB_WIN32__ ) or defined( __FB_DOS__ )
+	dim targetprefixlen as ulong
+	#ifndef ENABLE_STANDALONE
+		targetprefixlen = len( fbc.targetprefix )
+	#endif
+	dim toolnamelen as integer = len( fbctoolTB( ar ).name + ".exe" ) + _
+		iif( targetprefixlen > len( fbc.buildprefix ), targetprefixlen, len( fbc.buildprefix ) )
+	if( (fbGetOption( FB_COMPOPT_TARGET ) = FB_COMPTARGET_DOS) or _
+		(len( ln ) > (2047 - toolnamelen)) ) then
+		if( hPutLdArgsIntoFile( ln ) = FALSE ) then
+			exit function
+		end if
+	end if
+#endif
+
 	'' invoke ar
 	function = fbcRunBin( "archiving", ar, ln )
 end function
@@ -4449,6 +4474,7 @@ private sub hPrintOptions( byval verbose as integer )
 
 	if( verbose ) then
 	print "  -earray          Enable array bounds checking"
+	print "  -earraydims      Enable array dimensions checking"
 	print "  -eassert         Enable assert() and assertwarn() checking"
 	print "  -edebug          Enable __FB_DEBUG__"
 	print "  -edebuginfo      Add debug info"
@@ -4556,6 +4582,7 @@ private sub hPrintOptions( byval verbose as integer )
 	print "  -z no-fastcall   Don't use '__fastcall' calling convention"
 	print "  -z nobuiltins    Disable all non-required builtin procedure definitions"
 	print "  -z nocmdline     Disable #cmdline source directives"
+	print "  -z optabstract   Only supports optimizing purely abstract types"
 	print "  -z retinflts     Enable returning some types in floating point registers"
 	print "  -z valist-as-ptr Use pointer expressions to implement CVA_*() macros"
 	else
@@ -4576,7 +4603,7 @@ private sub hPrintVersion( byval verbose as integer )
 
 	print "FreeBASIC Compiler - Version " + FB_VERSION + _
 		" (" + FB_BUILD_DATE_ISO + "), built for " + fbGetHostId( ) + " (" & fbGetHostBits( ) & "bit)"
-	print "Copyright (C) 2004-2024 The FreeBASIC development team."
+	print "Copyright (C) 2004-2025 The FreeBASIC development team."
 
 	#ifdef ENABLE_STANDALONE
 		hAppendConfigInfo( config, "standalone" )

@@ -16,10 +16,24 @@
 	#include <windows.h>
 #endif
 
-/* profile section data */
+/* choose a suitable size_t printf specifier */
+#if !defined(fmtsizet)
+	#if defined(HOST_CYGWIN)
+		#define fmtsizet "%18Iu"
+	#elif defined(HOST_WIN32)
+		#if defined(_UCRT) || __USE_MINGW_ANSI_STDIO
+			#define fmtsizet "%18zu"
+		#else
+			#define fmtsizet "%18Iu"
+		#endif
+	#else
+		#define fmtsizet "%18zu"
+	#endif
+#endif
 
-extern int __start_fb_profilecycledata;
-extern int __stop_fb_profilecycledata;
+/* profile section data */
+extern char __start_fb_profilecycledata[];
+extern char __stop_fb_profilecycledata;
 
 /* profiler record ids - these indicate what the record is */
 enum FB_PROFILE_REDORD_ID
@@ -80,6 +94,11 @@ typedef struct _FB_PROFILER_CYCLES
 ** Globals
 */
 
+/* FIXME: creating a library with other sections causes dxe3gen to fail
+**        when building the DXE dynamic link library support for DOS
+*/
+#if !defined(HOST_DOS)
+
 /* make sure there is at least one record in the profile data section */
 static FB_PROFILE_RECORD_VERSION
 __attribute__ ((aligned (16))) prof_data_version
@@ -89,6 +108,8 @@ __attribute__((section("fb_profilecycledata"), used)) =
 		FB_PROFILE_RECORD_VERSION_ID,
 		FB_PROFILE_VERSION, 0
 	};
+
+#endif
 
 static FB_PROFILER_CYCLES *fb_profiler = NULL;
 
@@ -114,7 +135,7 @@ static FB_PROFILER_CYCLES *PROFILER_CYCLES_create( void )
 	return fb_profiler;
 }
 
-static void PROFILER_CYCLES_destroy(  )
+static void PROFILER_CYCLES_destroy( void )
 {
 	if( fb_profiler ) {
 		PROFILER_GLOBAL_destroy( );
@@ -128,7 +149,7 @@ static void PROFILER_CYCLES_destroy(  )
 */
 
 #if 0
-static hProfilerReportBinary( )
+static hProfilerReportBinary( void )
 {
 	f1 = fopen( "profilename.prf", "w" );
 	f2 = fopen( "profilecycles.prf", "w" );
@@ -249,7 +270,7 @@ static void hProfilerReport (
 		}
 
 		fprintf( f, "        %s\n", rec->proc_name );
-		fprintf( f, "                %18zu %18zu %18zu\n",
+		fprintf( f, "                " fmtsizet " " fmtsizet " " fmtsizet "\n",
 			rec->grand_total,
 			rec->internal_total,
 			rec->call_count
@@ -280,8 +301,8 @@ static void hProfilerWriteReport( FB_PROFILER_CYCLES *prof )
 		fprintf( f, "Total program execution time: %5.4g seconds\n", fb_Timer() - prof->start_time );
 	}
 
-	data = (unsigned char *)&__start_fb_profilecycledata;
-	length = (ssize_t)&__stop_fb_profilecycledata - (ssize_t)&__start_fb_profilecycledata;
+	data = (unsigned char *)&__start_fb_profilecycledata[0];
+	length = (ssize_t)&__stop_fb_profilecycledata - (ssize_t)&__start_fb_profilecycledata[0];
 
 	count = hProfilerCountProcs( data, length );
 	if( count ) {
@@ -316,10 +337,8 @@ FBCALL void fb_InitProfileCycles( void )
 /*:::::*/
 FBCALL int fb_EndProfileCycles( int errorlevel )
 {
-	FB_PROFILER_CYCLES *prof = fb_profiler;
-	hProfilerWriteReport( prof );
-	PROFILER_CYCLES_destroy( fb_profiler );
-	fb_profiler = NULL;
+	hProfilerWriteReport( fb_profiler );
+	PROFILER_CYCLES_destroy( );
 	return errorlevel;
 }
 
